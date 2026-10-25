@@ -1,0 +1,15 @@
+Block Lists gathers what a firewall blocks by list into one page:
+public address lists (Spamhaus DROP, abuse.ch Feodo Tracker, Emerging
+Threats, CINS Army, blocklist.de) fetched daily into aliases, countries
+in a GeoIP alias, the DNS block lists of Unbound shown beside them, and
+TLS clients cut by their JA4 fingerprint from the Intrusion Detection's
+log. The block rules are registered by the plugin and never added to
+the owner's own rules. Connections already open to a newly listed
+address are cut, and on a Sophos XGS taken out of the coprocessor.
+
+Plugin Changelog
+================
+
+1.0.0
+
+* Initial release

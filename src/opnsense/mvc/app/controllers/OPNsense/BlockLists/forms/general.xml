@@ -1,0 +1,48 @@
+<!--
+    SPDX-License-Identifier: BSD-2-Clause
+    Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+-->
+<form>
+    <field>
+        <id>blocklists.general.enabled</id>
+        <label>Enabled</label>
+        <type>checkbox</type>
+        <help>Block what the lists below name. Off, the rules are gone at the next filter reload and nothing is cut; the lists stay chosen.</help>
+    </field>
+    <field>
+        <id>blocklists.general.feeds</id>
+        <label>Address lists</label>
+        <type>select_multiple</type>
+        <help>Public lists of addresses to block, each fetched by the firewall once a day into an alias of its own (blocklists_...). The Lists tab says what each one is and whose terms it comes under.</help>
+    </field>
+    <field>
+        <id>blocklists.general.countries</id>
+        <label>Countries</label>
+        <type>select_multiple</type>
+        <help>Block every address registered to these countries, in a GeoIP alias. It needs a GeoIP source set in Firewall: Aliases: GeoIP settings; without one the alias stays empty.</help>
+    </field>
+    <field>
+        <id>blocklists.general.direction</id>
+        <label>Direction</label>
+        <type>dropdown</type>
+        <help>Inbound only: nothing from a listed address gets in. Both ways: nothing inside can reach one either.</help>
+    </field>
+    <field>
+        <id>blocklists.general.log</id>
+        <label>Log blocked packets</label>
+        <type>checkbox</type>
+        <help>Write every packet the rules block to the firewall log. A long list blocks a lot.</help>
+    </field>
+    <field>
+        <id>blocklists.general.cut</id>
+        <label>Cut open connections</label>
+        <type>checkbox</type>
+        <help>A block rule stops new connections only. With this on, a connection already open to or from an address a list has just gained is cut within a minute, and on a Sophos XGS taken out of the coprocessor with it.</help>
+    </field>
+    <field>
+        <id>blocklists.general.ja4</id>
+        <label>TLS fingerprints (JA4)</label>
+        <type>text</type>
+        <help>Cut every TLS connection whose client shows one of these JA4 fingerprints, separated by commas - it names the program, whatever server it goes to. Read from the Intrusion Detection's TLS log, which must carry the ja4 field; the JA4 tab says what is missing and which fingerprints are seen.</help>
+    </field>
+</form>

@@ -1,0 +1,50 @@
+{
+ "spamhaus_drop": {
+  "name": "Spamhaus DROP (IPv4)",
+  "url": "https://www.spamhaus.org/drop/drop.txt",
+  "proto": "IPv4",
+  "days": 1,
+  "what": "Networks hijacked or leased by spammers and cyber-criminals; Spamhaus says nothing legitimate is in them.",
+  "terms": "https://www.spamhaus.org/blocklists/do-not-route-or-peer/"
+ },
+ "spamhaus_dropv6": {
+  "name": "Spamhaus DROP (IPv6)",
+  "url": "https://www.spamhaus.org/drop/dropv6.txt",
+  "proto": "IPv6",
+  "days": 1,
+  "what": "The same list for IPv6.",
+  "terms": "https://www.spamhaus.org/blocklists/do-not-route-or-peer/"
+ },
+ "feodo": {
+  "name": "abuse.ch Feodo Tracker",
+  "url": "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.txt",
+  "proto": "IPv4",
+  "days": 1,
+  "what": "Command servers of botnets (Dridex, Emotet, QakBot and others) seen active, as abuse.ch recommends blocking them.",
+  "terms": "https://abuse.ch/terms-of-use/"
+ },
+ "et_compromised": {
+  "name": "Emerging Threats compromised hosts",
+  "url": "https://rules.emergingthreats.net/blockrules/compromised-ips.txt",
+  "proto": "IPv4",
+  "days": 1,
+  "what": "Hosts Proofpoint's Emerging Threats has seen compromised and attacking.",
+  "terms": "https://rules.emergingthreats.net/"
+ },
+ "cins_army": {
+  "name": "CINS Army",
+  "url": "https://cinsscore.com/list/ci-badguys.txt",
+  "proto": "IPv4",
+  "days": 1,
+  "what": "Addresses Sentinel IPS has scored as bad actors - a long list, refreshed often.",
+  "terms": "https://cinsscore.com/"
+ },
+ "blocklist_de": {
+  "name": "blocklist.de (all)",
+  "url": "https://lists.blocklist.de/lists/all.txt",
+  "proto": "",
+  "days": 1,
+  "what": "Addresses reported for attacks on SSH, mail, web and other services in the last 48 hours; IPv4 and IPv6.",
+  "terms": "https://www.blocklist.de/en/index.html"
+ }
+}

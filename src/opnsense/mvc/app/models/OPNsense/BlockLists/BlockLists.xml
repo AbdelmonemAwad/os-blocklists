@@ -1,0 +1,59 @@
+<!--
+    SPDX-License-Identifier: BSD-2-Clause
+    Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+-->
+<model>
+    <mount>//OPNsense/BlockLists</mount>
+    <version>1.0.0</version>
+    <description>Block lists</description>
+    <items>
+        <!--
+            plugins.inc.d/blocklists.inc, cut.py and ja4_cut.py read these straight out of config.xml
+            by element name, so the names are not free.
+        -->
+        <general>
+            <enabled type="BooleanField">
+                <Required>Y</Required>
+                <Default>1</Default>
+            </enabled>
+            <!-- the ids of scripts/blocklists/feeds.json; a feed added there is added here too -->
+            <feeds type="OptionField">
+                <Multiple>Y</Multiple>
+                <Required>N</Required>
+                <OptionValues>
+                    <spamhaus_drop>Spamhaus DROP (IPv4)</spamhaus_drop>
+                    <spamhaus_dropv6>Spamhaus DROP (IPv6)</spamhaus_dropv6>
+                    <feodo>abuse.ch Feodo Tracker</feodo>
+                    <et_compromised>Emerging Threats compromised hosts</et_compromised>
+                    <cins_army>CINS Army</cins_army>
+                    <blocklist_de>blocklist.de (all)</blocklist_de>
+                </OptionValues>
+            </feeds>
+            <countries type="CountryField">
+                <Multiple>Y</Multiple>
+                <Required>N</Required>
+            </countries>
+            <direction type="OptionField">
+                <Required>Y</Required>
+                <Default>both</Default>
+                <OptionValues>
+                    <in>Inbound only</in>
+                    <both>Both ways</both>
+                </OptionValues>
+            </direction>
+            <log type="BooleanField">
+                <Required>Y</Required>
+                <Default>0</Default>
+            </log>
+            <cut type="BooleanField">
+                <Required>Y</Required>
+                <Default>1</Default>
+            </cut>
+            <ja4 type="TextField">
+                <Required>N</Required>
+                <Mask>/^([tqd][0-9a-z]{2}[di][0-9]{4}[0-9A-Za-z]{2}_[0-9a-f]{12}_[0-9a-f]{12}[\s,]*)*$/</Mask>
+                <ValidationMessage>Each fingerprint looks like t13d1516h2_8daaf6152771_02713d6af862, separated by commas.</ValidationMessage>
+            </ja4>
+        </general>
+    </items>
+</model>
