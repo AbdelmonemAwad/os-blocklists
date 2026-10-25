@@ -1,0 +1,14 @@
+<!--
+    SPDX-License-Identifier: BSD-2-Clause
+    Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+-->
+<menu>
+    <!--
+        Where os-xgs-npu is not installed: under Firewall, beside Aliases and Rules, because this
+        page writes the one and adds to the other. No order is given. place-menu.sh copies this
+        file, or xgs.xml, to the model's Menu/Menu.xml.
+    -->
+    <Firewall>
+        <BlockLists VisibleName="Block Lists" cssClass="fa fa-ban fa-fw" url="/ui/blocklists"/>
+    </Firewall>
+</menu>

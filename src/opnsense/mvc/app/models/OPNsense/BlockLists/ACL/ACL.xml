@@ -1,0 +1,14 @@
+<!--
+    SPDX-License-Identifier: BSD-2-Clause
+    Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+-->
+<acl>
+    <page-firewall-blocklists>
+        <name>Firewall: Block Lists</name>
+        <description>Allow access to the block lists: choosing lists and countries, the firewall aliases and rules they make, and cutting connections</description>
+        <patterns>
+            <pattern>ui/blocklists/*</pattern>
+            <pattern>api/blocklists/*</pattern>
+        </patterns>
+    </page-firewall-blocklists>
+</acl>
