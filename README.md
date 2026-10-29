@@ -69,10 +69,29 @@ On the first XGS 3300, 2026-10-25, OPNsense 26.7.7 with os-xgs-npu installed, be
 - its menu place: under **XGS** with os-xgs-npu installed; in its own section, **Firewall**, when
   os-xgs-npu's menu file was set aside, and back under XGS when it was put back (`place-menu.sh`).
 
-Not tested: `apply.php` writing the aliases (it saves config.xml), the rules with lists in them,
-the lists fetched, a cut, a JA4 cut through this plugin, ~~the page in a browser~~ (opened on
-2026-10-25, above), the package (built by `tools/make-package.sh`, added with pkg), and an install
-on a plain OPNsense, without os-xgs-npu.
+On a plain OPNsense 26.7 in qemu, 2026-10-29: the nano image with nothing of os-xgs-npu on it, its
+WAN reaching the internet. Three lists - Spamhaus DROP, Feodo Tracker and CINS Army - were chosen
+through the plugin's model and applied with `configctl blocklists apply`, then the filter was
+reloaded and the aliases refreshed.
+
+- **The package.** `os-blocklists-1.0.0.pkg` and `SHA256SUMS` were fetched from the release and the
+  sum checked OK. `pkg add` returned 0, and the page is under Firewall > Block Lists.
+- **The aliases.** apply answered `blocklists_spamhaus_drop: added`, `blocklists_feodo: added` and
+  `blocklists_cins_army: added`, and all three are in config.xml.
+- **The lists fetched.** OPNsense filled the tables: CINS Army with 15,000 entries, Spamhaus DROP
+  with 1,758 and Feodo Tracker with 1, the day's list.
+- **The rules.** pf holds `block drop in quick inet from <blocklists_...>` and `block drop out quick
+  inet from any to <blocklists_...>` for each list.
+- **A cut.** Three states were open to the host's web server. Its address was added to the Feodo
+  table, as a list gaining it would, and `cut.py` was run: it found 1 new entry and cut the 3 open
+  connections, and none were left. The log reads `blocklists_feodo: 1 new entry of 2, 3 open
+  connections cut`.
+
+Not tested: ~~`apply.php` writing the aliases (it saves config.xml), the rules with lists in them,
+the lists fetched, a cut~~ (on 2026-10-29 in qemu, above), a JA4 cut through this plugin, ~~the page
+in a browser~~ (opened on 2026-10-25, above), ~~the package (built by `tools/make-package.sh`, added
+with pkg), and an install on a plain OPNsense, without os-xgs-npu~~ (on 2026-10-29 in qemu, above).
+The JA4 cut needs Intrusion Detection running with its TLS log, which was not set up here.
 
 ## Installation
 
