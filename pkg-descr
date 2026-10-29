@@ -10,6 +10,15 @@ address are cut, and on a Sophos XGS taken out of the coprocessor.
 Plugin Changelog
 ================
 
+1.0.1
+
+* a list chosen again cuts what it names, also what was opened while it was not chosen
+* only the aliases Block Lists makes are its own; an owner's alias named blocklists_* is left alone
+* the JA4 watch covers the whole minute, so a fingerprint listed mid-minute is cut within seconds
+* the IDS log read a line at a time; snapshots written only on a change, by one run at a time
+* the rules hook is checked by php -l, before the installer copies it
+* removal stops its cuts, deletes its state and empties its tables that nothing uses
+
 1.0.0
 
 * Initial release

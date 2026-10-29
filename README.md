@@ -1,4 +1,20 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/banner-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/readme/banner-light.svg">
+  <img src="docs/images/readme/banner-light.svg" alt="os-blocklists - Address, country and JA4 block lists, in one page" width="100%">
+</picture>
+
 # Block Lists for OPNsense
+
+[![release](https://img.shields.io/github/v/release/AbdelmonemAwad/os-blocklists?sort=semver&style=flat-square&color=555555)](https://github.com/AbdelmonemAwad/os-blocklists/releases/latest)
+[![checks](https://github.com/AbdelmonemAwad/os-blocklists/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/AbdelmonemAwad/os-blocklists/actions/workflows/checks.yml)
+[![licence: BSD-2-Clause](https://img.shields.io/badge/licence-BSD--2--Clause-blue.svg?style=flat-square)](LICENSE)
+[![OPNsense 26.7](https://img.shields.io/badge/OPNsense-26.7-d94f00.svg?style=flat-square)](#what-is-tested)
+[![part of os-xgs-npu](https://img.shields.io/badge/part%20of-os--xgs--npu-9a6700.svg?style=flat-square)](https://github.com/AbdelmonemAwad/os-xgs-npu)
+
+[![lists in qemu: CINS 15,000 · DROP 1,758 · Feodo 1](https://img.shields.io/badge/lists%20in%20qemu-CINS%2015%2C000%20%C2%B7%20DROP%201%2C758%20%C2%B7%20Feodo%201-brightgreen.svg?style=flat-square)](#what-is-tested)
+[![open connections: 3 of 3 cut](https://img.shields.io/badge/open%20connections-3%20of%203%20cut-brightgreen.svg?style=flat-square)](#what-is-tested)
+[![JA4: cut 2 s after the handshake](https://img.shields.io/badge/JA4-cut%202%20s%20after%20the%20handshake-brightgreen.svg?style=flat-square)](#what-is-tested)
 
 Block lists in one place: addresses, DNS names, countries and JA4 fingerprints of TLS clients, gathered into one page - and on a Sophos XGS ~~cut by the coprocessor in hardware~~ a cut connection taken out of the coprocessor with its state (the coprocessor holds no address list of its own to block by - os-xgs-npu's hardware-drop research, issue 519).
 
@@ -8,6 +24,9 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
 >
 > ~~**Written, not released (2026-10-22).** The code is here; there is no release, and it has not been
 > installed on an appliance yet. What was run is listed under [What is tested](#what-is-tested).~~
+>
+> **1.0.1 (2026-10-30):** a list chosen again cuts what it names, only its own aliases taken for its own, a JA4 watch over the whole minute, and a removal that leaves nothing running. Tested in qemu on OPNsense 26.7.7 before the release; see
+> [What is tested](#what-is-tested).
 >
 > **1.0.0, the first release (2026-10-25).** Installed and its page opened on an XGS 3300 (OPNsense
 > 26.7.7) before the release; ~~no list has been applied through it yet~~ - since, on 2026-10-29 in
@@ -181,8 +200,8 @@ Check it and read it before adding it, as root:
 
 ```sh
 sha256sum -c SHA256SUMS
-pkg info -lF os-blocklists-1.0.0.pkg      # every file it will write
-pkg add os-blocklists-1.0.0.pkg
+pkg info -lF os-blocklists-*.pkg       # every file it will write
+pkg add os-blocklists-*.pkg
 ```
 
 `pkg delete os-blocklists` takes the rules hook with the files and reloads the filter, so the rules
