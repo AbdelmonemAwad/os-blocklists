@@ -134,8 +134,16 @@ rules hook with `php -l` and the Python with `py_compile` before anything is cop
 it), then copies `src/` onto `/usr/local` (the rules hook and the cron entry for the cuts with it),
 puts the page in the menu (`place-menu.sh`: XGS with os-xgs-npu, Firewall without) and records the
 commit for the self-update. Safe to run again: the settings in config.xml are kept. Nothing is
-blocked until lists are chosen on the page and applied. `sh install/uninstall.sh` removes the plugin and its rules; the
-`blocklists_*` aliases stay in Firewall: Aliases, blocking nothing.
+blocked until lists are chosen on the page and applied. `sh install/uninstall.sh` removes the plugin
+and its rules; the `blocklists_*` aliases stay in Firewall: Aliases, blocking nothing, and OPNsense
+goes on fetching their lists once a day.
+
+**Before removing it**, turn **Enabled** off and **Apply** to take the aliases away as well: the
+Apply removes each alias of the plugin's that nothing else names (one that a rule of the owner's
+names is switched off instead). The removal itself, by the script or by pkg, stops a cut that is
+running, deletes what the cuts kept in `/var/db/os-blocklists`, and empties the pf table of each of
+the plugin's aliases that is gone, when no rule uses it - a table outlives its alias, and went on
+holding the addresses (all of this since 2026-10-29).
 
 **From a release's package.** A release carries `os-blocklists-<version>.pkg` and `SHA256SUMS`,
 built by `tools/make-package.sh` in the release workflow; installing it has not been tested yet.
@@ -148,8 +156,9 @@ pkg add os-blocklists-1.0.0.pkg
 ```
 
 `pkg delete os-blocklists` takes the rules hook with the files and reloads the filter, so the rules
-leave pf; the settings and the `blocklists_*` aliases stay, blocking nothing. The same package is built on
-the firewall from a checkout with `sh tools/make-package.sh -o /tmp`.
+leave pf; the settings and the `blocklists_*` aliases stay, blocking nothing (see **Before removing
+it**, above). The same package is built on the firewall from a checkout with
+`sh tools/make-package.sh -o /tmp`.
 
 ## Updates
 
