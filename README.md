@@ -34,7 +34,7 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
   minute (`cut.py`), and on a Sophos XGS taken out of the coprocessor with its state;
 - **JA4** - TLS connections whose client shows a listed fingerprint are cut, read from the
   Intrusion Detection's TLS log every two seconds (`ja4_cut.py`); the page lists the fingerprints
-  seen, to find the one to list;
+  seen, to find the one to list (those in the log's last 64 MB, since 2026-10-29);
 - **DNS lists** - OPNsense keeps them itself, in Unbound DNS: Blocklists; the page shows them beside
   the others and links there.
 
@@ -56,6 +56,29 @@ rewritten or removed by its next Apply; one by another `blocklists_` name is lef
 which has not been changed: they still run where it is installed, for the lists and fingerprints
 XGS: Settings names. Here, a list or a fingerprint named there is left to os-xgs-npu, so nothing is
 cut twice; everything else is this plugin's.
+
+## Not yet, and why
+
+- **a QUIC or DTLS client's JA4** - only a TLS client over TCP (`t...`) is cut: `ja4_cut.py` reads
+  the Intrusion Detection's `tls` lines, and a QUIC (`q...`) or DTLS (`d...`) client's fingerprint
+  is not among them. Since 2026-10-29 the field takes `t` fingerprints only; before, such a one was
+  taken and never matched.
+- **the command line's apply writes the aliases only** - `configctl blocklists apply` is the first
+  step of the page's Apply, which then reloads the filter (`configctl filter reload skip_alias`), its
+  template (`configctl template reload OPNsense/Filter`) and the aliases (`configctl filter
+  refresh_aliases`), and runs the cuts once (`configctl blocklists cut`, `configctl blocklists ja4`).
+  From a shell, run those after it, as the tests below did.
+- **a fingerprint listed as the Intrusion Detection begins to log JA4** is watched from the next
+  minute: until then the minute's watch has found nothing to read and ended. Listed while the
+  Intrusion Detection already logs JA4, it is watched within two seconds - since 2026-10-29 the watch
+  goes on through the minute with nothing listed; before, a fingerprint listed during the minute waited
+  for the next one. Not yet tested.
+- **the aliases outlive the plugin** - removed, it leaves them in Firewall: Aliases, blocking nothing,
+  and OPNsense goes on fetching their lists; turn Enabled off and Apply before removing it
+  ([Installation](#installation)).
+- **no list is dropped in an XGS's hardware** - the coprocessor holds no address list of its own to
+  block by (os-xgs-npu's hardware-drop research, issue 519); a cut connection is taken out of the
+  coprocessor with its state.
 
 ## What is tested
 
@@ -117,6 +140,12 @@ the lists fetched, a cut~~ (on 2026-10-29 in qemu, above), ~~a JA4 cut through t
 os-xgs-npu~~ (on 2026-10-29 in qemu, above). ~~The JA4 cut needs Intrusion Detection running with
 its TLS log, which was not set up here.~~ It was, on a second machine's connections (above).
 
+Written after the tests above and not yet tested (2026-10-29): only the plugin's own alias names
+taken for its own; a list watched again cutting what it names, and its snapshot written only when
+its table changed; the JA4 watch going on through the minute with nothing listed, the log read a
+line at a time, and the field taking `t` fingerprints only; the checks before the copy; and the
+removal's stopping of a running cut, its deleting of the state and its emptying of stale tables.
+
 ## Installation
 
 It is not in the OPNsense plugin repository, so there is no `pkg install os-blocklists`.
@@ -146,7 +175,8 @@ the plugin's aliases that is gone, when no rule uses it - a table outlives its a
 holding the addresses (all of this since 2026-10-29).
 
 **From a release's package.** A release carries `os-blocklists-<version>.pkg` and `SHA256SUMS`,
-built by `tools/make-package.sh` in the release workflow; installing it has not been tested yet.
+built by `tools/make-package.sh` in the release workflow; ~~installing it has not been tested yet~~
+it was added with pkg on a plain OPNsense on 2026-10-29 - see [What is tested](#what-is-tested).
 Check it and read it before adding it, as root:
 
 ```sh
