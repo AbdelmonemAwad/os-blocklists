@@ -26,13 +26,17 @@ os-xgs-npu's docs/measurements/ja4-cut-2026-10-19.md.
     ja4_cut.py --for 58     the same every 2 seconds for 58 seconds (cron, every minute), so a
                             connection is cut within seconds of its ClientHello
     ja4_cut.py --status     print the last run's record
-    ja4_cut.py --seen       the fingerprints in the log now, the most frequent first, each with the
-                            last connection that presented it - to find the one to list
+    ja4_cut.py --seen       the fingerprints in the log's last 64 MB, the most frequent first, each
+                            with the last connection that presented it - to find the one to list
 
 A fingerprint newly listed is looked for in the whole log since it was last rotated, so listing one
 cuts what is already open with it. A state is cut only when pf made it no later than the log line
 that names its connection, so a later connection that happens to reuse the same ports is never taken
 for it. Never fails its caller; what it could not do is in the summary and in the system log.
+
+The log is read a line at a time and only what is looked for is kept (2026-10-29): every TLS line of
+it was held in memory before anything was looked at, so a log of a week of TLS was held whole - by
+--seen at every press of the page's button, and by the search for a fingerprint just listed.
 """
 import fcntl
 import ipaddress
@@ -54,6 +58,7 @@ PFCTL = '/sbin/pfctl'
 TAG = 'blocklists-ja4'
 EVERY = 2           # seconds between two readings of the log in --for
 SLACK = 5           # seconds a state may be younger than its log line: Suricata stamps the packet
+SEEN_TAIL = 64 * 1024 * 1024    # bytes of the log --seen reads, back from its end
 
 # protocol, TLS version, SNI or not, cipher and extension counts, the ALPN's first and last character;
 # then the two truncated hashes - https://github.com/FoxIO-LLC/ja4
@@ -106,29 +111,31 @@ def stamp(text):
         return None
 
 
-def tls_events(fh):
-    """(offset of the next whole line, [event]) for every TLS line with a JA4 from fh's position;
-    a last line not yet ended is left for the next reading."""
-    out = []
+def tls_events(fh, at):
+    """Every TLS line with a JA4 from fh's position, as an event, one at a time - a generator, so the
+    caller keeps what it looks for and nothing else. at['end'] follows the offset of the next whole
+    line; a last line not yet ended is left for the next reading."""
     pos = fh.tell()
+    at['end'] = pos
     for raw in iter(fh.readline, b''):
         if not raw.endswith(b'\n'):
             break
-        pos += len(raw)
+        start, pos = pos, pos + len(raw)
+        at['end'] = pos
         if b'"event_type":"tls"' not in raw or b'"ja4"' not in raw:
             continue
         try:
             ev = json.loads(raw)
-            fp = ev['tls']['ja4']
-            out.append({
-                'ja4': fp, 'at': stamp(ev.get('timestamp')), 'proto': str(ev.get('proto', '')).lower(),
+            event = {
+                'ja4': ev['tls']['ja4'], 'at': stamp(ev.get('timestamp')),
+                'proto': str(ev.get('proto', '')).lower(),
                 'src': (str(ipaddress.ip_address(ev['src_ip'])), int(ev['src_port'])),
                 'dst': (str(ipaddress.ip_address(ev['dest_ip'])), int(ev['dest_port'])),
-                'offset': pos - len(raw),
-            })
+                'offset': start,
+            }
         except (ValueError, KeyError, TypeError):
             continue
-    return pos, out
+        yield event
 
 
 ENDPOINT_V6 = re.compile(r'^([0-9A-Fa-f:.]+)\[(\d+)\]$')
@@ -250,14 +257,16 @@ class Watch:
         if start >= info.st_size:
             st['listed'] = listed
             return summary
+        want = set(listed)
+        matched, at = [], {}
         with open(EVE, 'rb') as fh:
             fh.seek(start)
-            end, events = tls_events(fh)
-        summary['read'] = len(events)
-        want = set(listed)
-        matched = [e for e in events if e['ja4'] in want and (e['ja4'] in fresh or e['offset'] >= known)]
+            for e in tls_events(fh, at):
+                summary['read'] += 1
+                if e['ja4'] in want and (e['ja4'] in fresh or e['offset'] >= known):
+                    matched.append(e)
         summary['matched'] = len(matched)
-        st.update({'inode': info.st_ino, 'offset': end, 'listed': listed})
+        st.update({'inode': info.st_ino, 'offset': at['end'], 'listed': listed})
         if not matched:
             return summary
         try:
@@ -310,17 +319,21 @@ def fmt(end):
     return f'[{addr}]:{port}' if ':' in addr else f'{addr}:{port}'
 
 
-def seen(limit=50):
-    """The fingerprints in the log now, the most frequent first."""
+def seen(limit=50, tail=SEEN_TAIL):
+    """The fingerprints in the log's last `tail` bytes, the most frequent first: the ones looked for are
+    recent, and a log of a week is more than the page's request should read."""
     counts, last = {}, {}
     try:
         with open(EVE, 'rb') as fh:
-            _, events = tls_events(fh)
+            size = os.fstat(fh.fileno()).st_size
+            if size > tail:
+                fh.seek(size - tail)
+                fh.readline()       # the rest of the line the seek fell into
+            for e in tls_events(fh, {}):
+                counts[e['ja4']] = counts.get(e['ja4'], 0) + 1
+                last[e['ja4']] = e
     except OSError:
         return {'message': 'no Suricata log at ' + EVE, 'seen': []}
-    for e in events:
-        counts[e['ja4']] = counts.get(e['ja4'], 0) + 1
-        last[e['ja4']] = e
     rows = sorted(counts, key=lambda f: (-counts[f], f))[:limit]
     return {'seen': [{'ja4': f, 'connections': counts[f], 'last': f"{fmt(last[f]['src'])} -> {fmt(last[f]['dst'])}"}
                      for f in rows]}
