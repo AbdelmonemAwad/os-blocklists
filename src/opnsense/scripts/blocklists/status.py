@@ -108,7 +108,7 @@ def main():
                 'description': item.findtext('description') or '',
             })
 
-    listed, problem, bad = ja4_cut.settings()
+    listed, problem, bad, _ = ja4_cut.settings()
     project_ja4 = [f for f in re.split(r'[\s,]+', root.findtext('OPNsense/XGS/general/cut_ja4') or '') if f]
     project_lists = [u for u in (root.findtext('OPNsense/XGS/general/cut_lists') or '').split(',') if u.strip()]
 

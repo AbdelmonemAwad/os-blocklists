@@ -61,8 +61,10 @@ SLACK = 5           # seconds a state may be younger than its log line: Suricata
 SEEN_TAIL = 64 * 1024 * 1024    # bytes of the log --seen reads, back from its end
 
 # protocol, TLS version, SNI or not, cipher and extension counts, the ALPN's first and last character;
-# then the two truncated hashes - https://github.com/FoxIO-LLC/ja4
-JA4 = re.compile(r'^[tqd][0-9a-z]{2}[di][0-9]{4}[0-9A-Za-z]{2}_[0-9a-f]{12}_[0-9a-f]{12}$')
+# then the two truncated hashes - https://github.com/FoxIO-LLC/ja4. The protocol is t, TLS over TCP,
+# only (2026-10-29): the IDS's tls lines are all this reads, and a QUIC (q) or DTLS (d) client's
+# fingerprint is not among them - one was taken, and never matched. The model's mask takes t only.
+JA4 = re.compile(r'^t[0-9a-z]{2}[di][0-9]{4}[0-9A-Za-z]{2}_[0-9a-f]{12}_[0-9a-f]{12}$')
 
 
 def log(message):
@@ -73,14 +75,15 @@ def log(message):
 
 
 def settings():
-    """(the fingerprints listed, what is wrong with the IDS's TLS log for this, entries not read)."""
+    """(the fingerprints listed, what is wrong with the IDS's TLS log for this, entries not read,
+    whether Block Lists is on)."""
     try:
         root = ET.parse(CONFIG).getroot()
     except (OSError, ET.ParseError):
-        return [], 'config.xml could not be read', []
+        return [], 'config.xml could not be read', [], False
     listed, bad = [], []
     if (root.findtext('OPNsense/BlockLists/general/enabled') or '1') != '1':
-        return [], None, []
+        return [], None, [], False
     project = set(re.split(r'[\s,]+', root.findtext('OPNsense/XGS/general/cut_ja4') or ''))
     for item in re.split(r'[\s,]+', root.findtext('OPNsense/BlockLists/general/ja4') or ''):
         if item in project:
@@ -100,7 +103,7 @@ def settings():
         problem = 'the Intrusion Detection does not log TLS'
     elif 'ja4' not in (ids.findtext('eveLog/tls/custom') or '').split(','):
         problem = 'the Intrusion Detection\'s TLS log has no JA4'
-    return listed, problem, bad
+    return listed, problem, bad, True
 
 
 def stamp(text):
@@ -225,7 +228,7 @@ class Watch:
     def __init__(self):
         self.status = load(STATUS, {})
         self.config_mtime = None
-        self.listed, self.problem, self.bad = [], None, []
+        self.listed, self.problem, self.bad, self.on = [], None, [], False
 
     def reload(self):
         try:
@@ -234,7 +237,7 @@ class Watch:
             m = None
         if m != self.config_mtime:
             self.config_mtime = m
-            self.listed, self.problem, self.bad = settings()
+            self.listed, self.problem, self.bad, self.on = settings()
 
     def once(self):
         self.reload()
@@ -370,8 +373,12 @@ def main(argv):
             summary = w.once()
             cut += summary['cut']
             conns += summary.get('connections', 0)
-            if not w.listed and seconds:
-                break       # nothing to watch: the next minute's run looks again
+            # Off, or the IDS not logging JA4: the next minute's run looks again. Nothing listed is no
+            # reason to stop (2026-10-29): the minute's watch stopped then, and a fingerprint listed
+            # during the minute waited for the next one - the page's own run found the lock free but
+            # read once and left. With nothing listed, once() only looks at config.xml's time.
+            if seconds and (not w.on or w.problem):
+                break
             if time.monotonic() + EVERY > until:
                 break
             time.sleep(EVERY)
