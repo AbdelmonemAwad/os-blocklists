@@ -45,6 +45,11 @@ for XGS appliances only.
 FireHOL's level 1 is left out of the catalogue on purpose: it carries the private networks
 (RFC 1918's 10/8, 192.168/16 ...), and blocked both ways it would cut a firewall off its own LAN.
 
+The `blocklists_` prefix is reserved for the plugin: it makes and owns `blocklists_<id>` for each list
+of `feeds.json` and `blocklists_countries`, and an alias of the owner's by one of those names is
+rewritten or removed by its next Apply; one by another `blocklists_` name is left alone (until
+2026-10-29 every `blocklists_*` alias was blocked, cut and removed as the plugin's).
+
 ## Beside os-xgs-npu
 
 `cut.py` and `ja4_cut.py` came from os-xgs-npu (`scripts/xgs/lists_cut.py`, `scripts/xgs/ja4_cut.py`),

@@ -7,7 +7,7 @@ A block list in OPNsense is an alias - a pf table, filled from a URL, a feed or 
 refreshed on its own schedule - and a rule that blocks it blocks new connections only. A connection
 opened before its address was listed keeps its pf state, and on a Sophos XGS with offloading on its
 flow in the coprocessor, for as long as it carries traffic. With "Cut open connections" on, this
-watches the lists this plugin made (the blocklists_* aliases): for each, it compares the table with
+watches the lists this plugin made (owned() below): for each, it compares the table with
 what it held at the last run and kills, by id, every pf state with either end in what was added. A
 coprocessor's flow goes with its state: os-xgs-npu's drivers take a connection out of hardware once
 pf no longer holds it (its docs/measurements/lists-cut-2026-10-19.md).
@@ -45,6 +45,7 @@ CONFIG = '/conf/config.xml'
 STATE_DIR = '/var/db/os-blocklists/cut'
 STATUS = os.path.join(STATE_DIR, 'status.json')
 LOCK = os.path.join(STATE_DIR, 'lock')
+FEEDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'feeds.json')
 PFCTL = '/sbin/pfctl'
 TAG = 'blocklists'
 PREFIX = 'blocklists_'
@@ -58,6 +59,22 @@ def log(message):
         pass
 
 
+def owned(path=FEEDS):
+    """The names of the aliases this plugin makes, and so owns: blocklists_<id> for each list of
+    feeds.json, and blocklists_countries. Only these - an alias of the owner's by another blocklists_
+    name is his. Until 2026-10-29 every blocklists_* alias was taken for the plugin's, so one he made -
+    a list of exceptions, say - was blocked both ways before his own rules, its connections cut, and
+    switched off or removed by the next Apply. apply.php and plugins.inc.d/blocklists.inc make the same
+    set from the same file; status.py takes this one."""
+    names = {PREFIX + 'countries'}
+    try:
+        with open(path, encoding='utf-8') as fh:
+            names.update(PREFIX + key for key in json.load(fh))
+    except (OSError, ValueError, TypeError):
+        pass
+    return names
+
+
 def watched_lists(path=CONFIG):
     """This plugin's own lists, when the setting says to cut, less those os-xgs-npu's XGS: Settings
     watches itself; None when config.xml cannot be read - nothing is cut then, and nothing forgotten."""
@@ -69,10 +86,11 @@ def watched_lists(path=CONFIG):
     if (root.findtext(general + 'enabled') or '1') != '1' or (root.findtext(general + 'cut') or '0') != '1':
         return []
     project = set(u for u in (root.findtext('OPNsense/XGS/general/cut_lists') or '').split(',') if u.strip())
+    mine = owned()
     out = []
     for alias in root.findall('OPNsense/Firewall/Alias/aliases/alias'):
         name = alias.findtext('name') or ''
-        if (name.startswith(PREFIX) and (alias.findtext('enabled') or '1') == '1'
+        if (name in mine and (alias.findtext('enabled') or '1') == '1'
                 and alias.get('uuid') not in project):
             out.append(name)
     return out
