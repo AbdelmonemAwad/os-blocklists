@@ -48,7 +48,9 @@ jobs:
       - name: PHP
         run: |
           shopt -s globstar nullglob
-          files=(src/**/*.php)
+          # .inc too: plugins.inc.d's rules hook is PHP that every filter reload includes, and an
+          # error in it stops them all. It was not checked here before 2026-10-29.
+          files=(src/**/*.php src/**/*.inc)
           [ ${#files[@]} -gt 0 ] || { echo "no PHP here"; exit 0; }
           for f in "${files[@]}"; do php -l "$f"; done
 
