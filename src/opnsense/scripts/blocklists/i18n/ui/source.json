@@ -29,9 +29,9 @@
  "Open connections",
  "Refresh",
  "Settings",
- "Show the fingerprints seen",
+ "Show fingerprints seen",
  "State",
- "The status could not be read.",
+ "Status could not be read.",
  "Unbound DNS is off",
  "addresses and networks",
  "in Unbound DNS",
@@ -42,5 +42,5 @@
  "off",
  "on",
  "os-xgs-npu also cuts connections on this host, for the lists and fingerprints XGS: Settings names. A list or fingerprint named there is left to it here, so nothing is cut twice.",
- "packets since the tables were loaded"
+ "packets since tables loaded"
 ]
