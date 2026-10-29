@@ -10,8 +10,10 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
 > installed on an appliance yet. What was run is listed under [What is tested](#what-is-tested).~~
 >
 > **1.0.0, the first release (2026-10-25).** Installed and its page opened on an XGS 3300 (OPNsense
-> 26.7.7) before the release; no list has been applied through it yet. Updated from XGS: Updates when
-> os-xgs-npu is installed, or by its own self-update - see [Updates](#updates).
+> 26.7.7) before the release; ~~no list has been applied through it yet~~ - since, on 2026-10-29 in
+> qemu, three lists were applied through it, open connections cut, and a TLS connection cut by its
+> JA4 fingerprint (see [What is tested](#what-is-tested)). Updated from XGS: Updates when os-xgs-npu
+> is installed, or by its own self-update - see [Updates](#updates).
 
 ## What it does
 
@@ -87,11 +89,28 @@ reloaded and the aliases refreshed.
   connections, and none were left. The log reads `blocklists_feodo: 1 new entry of 2, 3 open
   connections cut`.
 
+On two such machines in qemu the same day, the second a copy of the first, joined by a cable of
+their own. Intrusion Detection ran on the first in IDS mode, only listening, on that cable, its eve
+TLS log carrying the JA4 field. It was set through its own model and applied as its page's Apply
+does (the template, the rules installed, the service started). The second machine opened TLS
+connections to the first one's web server.
+
+- **The fingerprints seen.** `ja4_cut.py --seen` listed two from the second machine: `fetch`'s,
+  over three connections, and `openssl s_client`'s, over one.
+- **A JA4 cut.** A TLS connection was held open by `openssl s_client`, its request sent 12 s after
+  the handshake. Not listed, it was answered (`HTTP/1.0 200 OK`). Then s_client's fingerprint,
+  `t13d301100_1d37bd780c83_8e6e362c5eac`, was listed through the plugin's model and the page's
+  Apply. The next such connection was cut 2 s after its handshake by the job that reads the log
+  every two seconds - the system log names the fingerprint and the connection, `cut (1 state)` -
+  and its request was never answered. Once the fingerprint was removed and applied again, the
+  connection was answered again.
+
 Not tested: ~~`apply.php` writing the aliases (it saves config.xml), the rules with lists in them,
-the lists fetched, a cut~~ (on 2026-10-29 in qemu, above), a JA4 cut through this plugin, ~~the page
-in a browser~~ (opened on 2026-10-25, above), ~~the package (built by `tools/make-package.sh`, added
-with pkg), and an install on a plain OPNsense, without os-xgs-npu~~ (on 2026-10-29 in qemu, above).
-The JA4 cut needs Intrusion Detection running with its TLS log, which was not set up here.
+the lists fetched, a cut~~ (on 2026-10-29 in qemu, above), ~~a JA4 cut through this plugin~~ (on
+2026-10-29 in qemu, above), ~~the page in a browser~~ (opened on 2026-10-25, above), ~~the package
+(built by `tools/make-package.sh`, added with pkg), and an install on a plain OPNsense, without
+os-xgs-npu~~ (on 2026-10-29 in qemu, above). ~~The JA4 cut needs Intrusion Detection running with
+its TLS log, which was not set up here.~~ It was, on a second machine's connections (above).
 
 ## Installation
 
