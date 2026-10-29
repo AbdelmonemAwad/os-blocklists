@@ -165,8 +165,14 @@ released, not before.
   `/usr/local/share/os-blocklists/update.json`, and the installer's output in `update.log` beside it.
 - `self-update.py check` says what it would do and changes nothing.
 
-Not tested yet: an update taken this way - 1.0.0 is the first release, so none has been ahead of an
-installed copy.
+~~Not tested yet: an update taken this way - 1.0.0 is the first release, so none has been ahead of
+an installed copy.~~ Tested on 2026-10-29 on a plain OPNsense 26.7 in qemu, where the package had
+been added with pkg, which records no commit: `self-update.py check` found the release `v1.0.0`
+(0869feba684d) and nothing installed to compare it with, so to be taken. `self-update.py` fetched
+its source, ran its `install/install.sh` and answered `updated to v1.0.0 (0869feba684d)`, which the
+system log has too. `installed.json` then recorded that commit, from the stamp, and a second check
+found it identical: nothing to take. Not yet: a release ahead of the one installed - 1.0.0 is
+still the only release.
 
 ## Where it fits
 
