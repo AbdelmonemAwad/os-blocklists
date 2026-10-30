@@ -28,8 +28,9 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
 > ~~**Written, not released (2026-10-22).** The code is here; there is no release, and it has not been
 > installed on an appliance yet. What was run is listed under [What is tested](#what-is-tested).~~
 >
-> **1.0.1 (2026-10-30):** a list chosen again cuts what it names, only its own aliases taken for its own, a JA4 watch over the whole minute, and a removal that leaves nothing running. Tested in qemu on OPNsense 26.7.7 before the release; see
-> [What is tested](#what-is-tested).
+> **1.0.1 (2026-10-30):** a list chosen again cuts what it names, only its own aliases taken for its own, a JA4 watch over the whole minute, and a removal that leaves nothing running. ~~Tested in qemu on OPNsense 26.7.7 before the release; see~~ Tested in part before the
+> release, in qemu on OPNsense 26.7.7 from the branch that became it; what ran and what did not
+> is under [What is tested](#what-is-tested).
 >
 > **1.0.0, the first release (2026-10-25).** Installed and its page opened on an XGS 3300 (OPNsense
 > 26.7.7) before the release; ~~no list has been applied through it yet~~ - since, on 2026-10-29 in
@@ -141,7 +142,8 @@ reloaded and the aliases refreshed.
   connections, and none were left. The log reads `blocklists_feodo: 1 new entry of 2, 3 open
   connections cut`.
 
-On two such machines in qemu the same day, the second a copy of the first, joined by a cable of
+On two ~~such~~ machines in qemu the same day, plain OPNsense 26.7.7 - the first updated from 26.7 -
+the second a copy of the first, joined by a cable of
 their own. Intrusion Detection ran on the first in IDS mode, only listening, on that cable, its eve
 TLS log carrying the JA4 field. It was set through its own model and applied as its page's Apply
 does (the template, the rules installed, the service started). The second machine opened TLS
@@ -164,11 +166,27 @@ the lists fetched, a cut~~ (on 2026-10-29 in qemu, above), ~~a JA4 cut through t
 os-xgs-npu~~ (on 2026-10-29 in qemu, above). ~~The JA4 cut needs Intrusion Detection running with
 its TLS log, which was not set up here.~~ It was, on a second machine's connections (above).
 
-Written after the tests above and not yet tested (2026-10-29): only the plugin's own alias names
+Written after the tests above and ~~not yet tested~~ (2026-10-29), and tested in part that evening,
+below: only the plugin's own alias names
 taken for its own; a list watched again cutting what it names, and its snapshot written only when
 its table changed; the JA4 watch going on through the minute with nothing listed, the log read a
 line at a time, and the field taking `t` fingerprints only; the checks before the copy; and the
 removal's stopping of a running cut, its deleting of the state and its emptying of stale tables.
+
+1.0.1's branch, run on 2026-10-29 in qemu on OPNsense 26.7.7, before its release commit, with the
+second machine's connections:
+
+- **Only its own aliases.** An alias the plugin does not own, beside its own: after the rules hook
+  and after Apply it was still in config.xml, and no block rule named it.
+- **A list chosen again.** Feodo, unwatched and watched again: `blocklists_feodo: 1 new entry of 1,
+  0 open connections cut` - no connection to its address was open, so there was nothing to cut.
+- **JA4 through the minute.** With nothing listed the watch went on running, at 19:49:00 and again at
+  19:49:25; a fingerprint listed in the middle of the minute was cut at once, its one state with it.
+  Apply's own answer just after the listing still read `cut by TLS fingerprint: no fingerprint
+  listed`.
+
+Still not tested: the snapshot written only when its table changed, the log read a line at a time,
+the field refusing all but `t` fingerprints, the checks before the copy, and the removal.
 
 ## Installation
 
@@ -237,7 +255,7 @@ released, not before.
 - `self-update.py check` says what it would do and changes nothing.
 
 ~~Not tested yet: an update taken this way - 1.0.0 is the first release, so none has been ahead of
-an installed copy.~~ Tested on 2026-10-29 on a plain OPNsense 26.7 in qemu, where the package had
+an installed copy.~~ Tested on 2026-10-29 on a plain OPNsense ~~26.7~~ 26.7.7 in qemu, where the package had
 been added with pkg, which records no commit: `self-update.py check` found the release `v1.0.0`
 (0869feba684d) and nothing installed to compare it with, so to be taken. `self-update.py` fetched
 its source, ran its `install/install.sh` and answered `updated to v1.0.0 (0869feba684d)`, which the
