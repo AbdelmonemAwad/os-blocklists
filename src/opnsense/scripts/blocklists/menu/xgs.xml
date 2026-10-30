@@ -13,6 +13,6 @@
         Menu/Menu.xml.
     -->
     <XGS VisibleName="XGS" cssClass="fa fa-microchip fa-fw" order="35">
-        <BlockLists order="55" VisibleName="Block Lists" url="/ui/blocklists"/>
+        <BlockLists order="55" VisibleName="Block Lists" cssClass="fa fa-ban fa-fw" url="/ui/blocklists"/>
     </XGS>
 </menu>

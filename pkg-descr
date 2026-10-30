@@ -18,6 +18,7 @@ Plugin Changelog
 * the IDS log read a line at a time; snapshots written only on a change, by one run at a time
 * the rules hook is checked by php -l, before the installer copies it
 * removal stops its cuts, deletes its state and empties its tables that nothing uses
+* the page's menu entry carries an icon in the XGS section, and a Font Awesome 6 one in its own
 
 1.0.0
 
