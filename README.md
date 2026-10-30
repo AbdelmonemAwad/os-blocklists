@@ -4,17 +4,20 @@
   <img src="docs/images/readme/banner-light.svg" alt="os-blocklists - Address, country and JA4 block lists, in one page" width="100%">
 </picture>
 
+<p align="center">
+  <a href="https://github.com/AbdelmonemAwad/os-blocklists/releases/latest"><img alt="the newest release" src="https://img.shields.io/github/v/release/AbdelmonemAwad/os-blocklists?sort=semver&amp;style=flat-square&amp;label=release&amp;color=8250df"></a>
+  <a href="https://github.com/AbdelmonemAwad/os-blocklists/actions/workflows/checks.yml"><img alt="checks on main" src="https://img.shields.io/github/actions/workflow/status/AbdelmonemAwad/os-blocklists/checks.yml?branch=main&amp;style=flat-square&amp;label=checks"></a>
+  <a href="LICENSE"><img alt="licence: BSD-2-Clause" src="https://img.shields.io/badge/licence-BSD--2--Clause-blue.svg?style=flat-square"></a>
+  <a href="#what-is-tested"><img alt="OPNsense 26.7" src="https://img.shields.io/badge/OPNsense-26.7-d94f00.svg?style=flat-square"></a>
+  <a href="https://github.com/AbdelmonemAwad/opnsense-arabic"><img alt="the page in English and in Arabic" src="https://img.shields.io/badge/GUI-English%20%C2%B7%20Arabic-2da44e.svg?style=flat-square"></a>
+  <a href="https://github.com/AbdelmonemAwad/os-xgs-npu"><img alt="part of os-xgs-npu" src="https://img.shields.io/badge/part%20of-os--xgs--npu-9a6700.svg?style=flat-square"></a>
+  <br>
+  <a href="#what-is-tested"><img alt="lists in qemu: CINS 15,000 · DROP 1,758 · Feodo 1" src="https://img.shields.io/badge/lists%20in%20qemu-CINS%2015%2C000%20%C2%B7%20DROP%201%2C758%20%C2%B7%20Feodo%201-brightgreen.svg?style=flat-square"></a>
+  <a href="#what-is-tested"><img alt="open connections: 3 of 3 cut" src="https://img.shields.io/badge/open%20connections-3%20of%203%20cut-brightgreen.svg?style=flat-square"></a>
+  <a href="#what-is-tested"><img alt="JA4: cut 2 s after the handshake" src="https://img.shields.io/badge/JA4-cut%202%20s%20after%20the%20handshake-brightgreen.svg?style=flat-square"></a>
+</p>
+
 # Block Lists for OPNsense
-
-[![release](https://img.shields.io/github/v/release/AbdelmonemAwad/os-blocklists?sort=semver&style=flat-square&color=555555)](https://github.com/AbdelmonemAwad/os-blocklists/releases/latest)
-[![checks](https://github.com/AbdelmonemAwad/os-blocklists/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/AbdelmonemAwad/os-blocklists/actions/workflows/checks.yml)
-[![licence: BSD-2-Clause](https://img.shields.io/badge/licence-BSD--2--Clause-blue.svg?style=flat-square)](LICENSE)
-[![OPNsense 26.7](https://img.shields.io/badge/OPNsense-26.7-d94f00.svg?style=flat-square)](#what-is-tested)
-[![part of os-xgs-npu](https://img.shields.io/badge/part%20of-os--xgs--npu-9a6700.svg?style=flat-square)](https://github.com/AbdelmonemAwad/os-xgs-npu)
-
-[![lists in qemu: CINS 15,000 · DROP 1,758 · Feodo 1](https://img.shields.io/badge/lists%20in%20qemu-CINS%2015%2C000%20%C2%B7%20DROP%201%2C758%20%C2%B7%20Feodo%201-brightgreen.svg?style=flat-square)](#what-is-tested)
-[![open connections: 3 of 3 cut](https://img.shields.io/badge/open%20connections-3%20of%203%20cut-brightgreen.svg?style=flat-square)](#what-is-tested)
-[![JA4: cut 2 s after the handshake](https://img.shields.io/badge/JA4-cut%202%20s%20after%20the%20handshake-brightgreen.svg?style=flat-square)](#what-is-tested)
 
 Block lists in one place: addresses, DNS names, countries and JA4 fingerprints of TLS clients, gathered into one page - and on a Sophos XGS ~~cut by the coprocessor in hardware~~ a cut connection taken out of the coprocessor with its state (the coprocessor holds no address list of its own to block by - os-xgs-npu's hardware-drop research, issue 519).
 
@@ -25,14 +28,17 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
 > ~~**Written, not released (2026-10-22).** The code is here; there is no release, and it has not been
 > installed on an appliance yet. What was run is listed under [What is tested](#what-is-tested).~~
 >
-> **1.0.1 (2026-10-30):** a list chosen again cuts what it names, only its own aliases taken for its own, a JA4 watch over the whole minute, and a removal that leaves nothing running. Tested in qemu on OPNsense 26.7.7 before the release; see
-> [What is tested](#what-is-tested).
+> **1.0.1 (2026-10-30):** a list chosen again cuts what it names, only its own aliases taken for its own, a JA4 watch over the whole minute, and a removal that leaves nothing running. ~~Tested in qemu on OPNsense 26.7.7 before the release; see~~ Tested in part before the
+> release, in qemu on OPNsense 26.7.7 from the branch that became it; what ran and what did not
+> is under [What is tested](#what-is-tested).
 >
 > **1.0.0, the first release (2026-10-25).** Installed and its page opened on an XGS 3300 (OPNsense
 > 26.7.7) before the release; ~~no list has been applied through it yet~~ - since, on 2026-10-29 in
 > qemu, three lists were applied through it, open connections cut, and a TLS connection cut by its
 > JA4 fingerprint (see [What is tested](#what-is-tested)). Updated from XGS: Updates when os-xgs-npu
 > is installed, or by its own self-update - see [Updates](#updates).
+
+<p align="center"><b>Contents:</b> <a href="#what-it-does">What it does</a> &middot; <a href="#beside-os-xgs-npu">Beside os-xgs-npu</a> &middot; <a href="#not-yet-and-why">Not yet, and why</a> &middot; <a href="#what-is-tested">What is tested</a> &middot; <a href="#installation">Installation</a> &middot; <a href="#updates">Updates</a> &middot; <a href="#where-it-fits">Where it fits</a> &middot; <a href="#licence">Licence</a></p>
 
 ## What it does
 
@@ -136,7 +142,8 @@ reloaded and the aliases refreshed.
   connections, and none were left. The log reads `blocklists_feodo: 1 new entry of 2, 3 open
   connections cut`.
 
-On two such machines in qemu the same day, the second a copy of the first, joined by a cable of
+On two ~~such~~ machines in qemu the same day, plain OPNsense 26.7.7 - the first updated from 26.7 -
+the second a copy of the first, joined by a cable of
 their own. Intrusion Detection ran on the first in IDS mode, only listening, on that cable, its eve
 TLS log carrying the JA4 field. It was set through its own model and applied as its page's Apply
 does (the template, the rules installed, the service started). The second machine opened TLS
@@ -159,11 +166,27 @@ the lists fetched, a cut~~ (on 2026-10-29 in qemu, above), ~~a JA4 cut through t
 os-xgs-npu~~ (on 2026-10-29 in qemu, above). ~~The JA4 cut needs Intrusion Detection running with
 its TLS log, which was not set up here.~~ It was, on a second machine's connections (above).
 
-Written after the tests above and not yet tested (2026-10-29): only the plugin's own alias names
+Written after the tests above and ~~not yet tested~~ (2026-10-29), and tested in part that evening,
+below: only the plugin's own alias names
 taken for its own; a list watched again cutting what it names, and its snapshot written only when
 its table changed; the JA4 watch going on through the minute with nothing listed, the log read a
 line at a time, and the field taking `t` fingerprints only; the checks before the copy; and the
 removal's stopping of a running cut, its deleting of the state and its emptying of stale tables.
+
+1.0.1's branch, run on 2026-10-29 in qemu on OPNsense 26.7.7, before its release commit, with the
+second machine's connections:
+
+- **Only its own aliases.** An alias the plugin does not own, beside its own: after the rules hook
+  and after Apply it was still in config.xml, and no block rule named it.
+- **A list chosen again.** Feodo, unwatched and watched again: `blocklists_feodo: 1 new entry of 1,
+  0 open connections cut` - no connection to its address was open, so there was nothing to cut.
+- **JA4 through the minute.** With nothing listed the watch went on running, at 19:49:00 and again at
+  19:49:25; a fingerprint listed in the middle of the minute was cut at once, its one state with it.
+  Apply's own answer just after the listing still read `cut by TLS fingerprint: no fingerprint
+  listed`.
+
+Still not tested: the snapshot written only when its table changed, the log read a line at a time,
+the field refusing all but `t` fingerprints, the checks before the copy, and the removal.
 
 ## Installation
 
@@ -232,13 +255,15 @@ released, not before.
 - `self-update.py check` says what it would do and changes nothing.
 
 ~~Not tested yet: an update taken this way - 1.0.0 is the first release, so none has been ahead of
-an installed copy.~~ Tested on 2026-10-29 on a plain OPNsense 26.7 in qemu, where the package had
+an installed copy.~~ Tested on 2026-10-29 on a plain OPNsense ~~26.7~~ 26.7.7 in qemu, where the package had
 been added with pkg, which records no commit: `self-update.py check` found the release `v1.0.0`
 (0869feba684d) and nothing installed to compare it with, so to be taken. `self-update.py` fetched
 its source, ran its `install/install.sh` and answered `updated to v1.0.0 (0869feba684d)`, which the
 system log has too. `installed.json` then recorded that commit, from the stamp, and a second check
-found it identical: nothing to take. Not yet: a release ahead of the one installed - 1.0.0 is
-still the only release.
+found it identical: nothing to take. ~~Not yet: a release ahead of the one installed - 1.0.0 is
+still the only release.~~ Taken on 2026-10-30, on an XGS 3300 with OPNsense 26.7.7: with 1.0.0
+installed, `self-update.py`, run over SSH, answered `updated to v1.0.1 (05bdc59d2507)`, the system
+log carries the same line, and `installed.json` recorded that commit.
 
 ## Where it fits
 
