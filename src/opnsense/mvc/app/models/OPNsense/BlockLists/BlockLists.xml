@@ -49,9 +49,16 @@
                 <Required>Y</Required>
                 <Default>1</Default>
             </cut>
+            <!--
+                TLS over TCP fingerprints (t...) only, each set apart by a comma or a space: ja4_cut.py
+                reads the IDS's tls lines, where a QUIC (q) or DTLS (d) client's fingerprint is not, and
+                until 2026-10-29 one of those was taken here and never matched - as were two fingerprints
+                written together, which ja4_cut.py then refused as one. The same form as os-xgs-npu's
+                cut_ja4, t only.
+            -->
             <ja4 type="TextField">
                 <Required>N</Required>
-                <Mask>/^([tqd][0-9a-z]{2}[di][0-9]{4}[0-9A-Za-z]{2}_[0-9a-f]{12}_[0-9a-f]{12}[\s,]*)*$/</Mask>
+                <Mask>/^[\s,]*(t[0-9a-z]{2}[di][0-9]{4}[0-9A-Za-z]{2}_[0-9a-f]{12}_[0-9a-f]{12}([\s,]+t[0-9a-z]{2}[di][0-9]{4}[0-9A-Za-z]{2}_[0-9a-f]{12}_[0-9a-f]{12})*)?[\s,]*$/</Mask>
                 <ValidationMessage>Each fingerprint looks like t13d1516h2_8daaf6152771_02713d6af862, separated by commas.</ValidationMessage>
             </ja4>
         </general>

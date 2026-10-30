@@ -1,4 +1,20 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/banner-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/readme/banner-light.svg">
+  <img src="docs/images/readme/banner-light.svg" alt="os-blocklists - Address, country and JA4 block lists, in one page" width="100%">
+</picture>
+
 # Block Lists for OPNsense
+
+[![release](https://img.shields.io/github/v/release/AbdelmonemAwad/os-blocklists?sort=semver&style=flat-square&color=555555)](https://github.com/AbdelmonemAwad/os-blocklists/releases/latest)
+[![checks](https://github.com/AbdelmonemAwad/os-blocklists/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/AbdelmonemAwad/os-blocklists/actions/workflows/checks.yml)
+[![licence: BSD-2-Clause](https://img.shields.io/badge/licence-BSD--2--Clause-blue.svg?style=flat-square)](LICENSE)
+[![OPNsense 26.7](https://img.shields.io/badge/OPNsense-26.7-d94f00.svg?style=flat-square)](#what-is-tested)
+[![part of os-xgs-npu](https://img.shields.io/badge/part%20of-os--xgs--npu-9a6700.svg?style=flat-square)](https://github.com/AbdelmonemAwad/os-xgs-npu)
+
+[![lists in qemu: CINS 15,000 · DROP 1,758 · Feodo 1](https://img.shields.io/badge/lists%20in%20qemu-CINS%2015%2C000%20%C2%B7%20DROP%201%2C758%20%C2%B7%20Feodo%201-brightgreen.svg?style=flat-square)](#what-is-tested)
+[![open connections: 3 of 3 cut](https://img.shields.io/badge/open%20connections-3%20of%203%20cut-brightgreen.svg?style=flat-square)](#what-is-tested)
+[![JA4: cut 2 s after the handshake](https://img.shields.io/badge/JA4-cut%202%20s%20after%20the%20handshake-brightgreen.svg?style=flat-square)](#what-is-tested)
 
 Block lists in one place: addresses, DNS names, countries and JA4 fingerprints of TLS clients, gathered into one page - and on a Sophos XGS ~~cut by the coprocessor in hardware~~ a cut connection taken out of the coprocessor with its state (the coprocessor holds no address list of its own to block by - os-xgs-npu's hardware-drop research, issue 519).
 
@@ -8,6 +24,9 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
 >
 > ~~**Written, not released (2026-10-22).** The code is here; there is no release, and it has not been
 > installed on an appliance yet. What was run is listed under [What is tested](#what-is-tested).~~
+>
+> **1.0.1 (2026-10-30):** a list chosen again cuts what it names, only its own aliases taken for its own, a JA4 watch over the whole minute, and a removal that leaves nothing running. Tested in qemu on OPNsense 26.7.7 before the release; see
+> [What is tested](#what-is-tested).
 >
 > **1.0.0, the first release (2026-10-25).** Installed and its page opened on an XGS 3300 (OPNsense
 > 26.7.7) before the release; ~~no list has been applied through it yet~~ - since, on 2026-10-29 in
@@ -34,7 +53,7 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
   minute (`cut.py`), and on a Sophos XGS taken out of the coprocessor with its state;
 - **JA4** - TLS connections whose client shows a listed fingerprint are cut, read from the
   Intrusion Detection's TLS log every two seconds (`ja4_cut.py`); the page lists the fingerprints
-  seen, to find the one to list;
+  seen, to find the one to list (those in the log's last 64 MB, since 2026-10-29);
 - **DNS lists** - OPNsense keeps them itself, in Unbound DNS: Blocklists; the page shows them beside
   the others and links there.
 
@@ -45,12 +64,40 @@ for XGS appliances only.
 FireHOL's level 1 is left out of the catalogue on purpose: it carries the private networks
 (RFC 1918's 10/8, 192.168/16 ...), and blocked both ways it would cut a firewall off its own LAN.
 
+The `blocklists_` prefix is reserved for the plugin: it makes and owns `blocklists_<id>` for each list
+of `feeds.json` and `blocklists_countries`, and an alias of the owner's by one of those names is
+rewritten or removed by its next Apply; one by another `blocklists_` name is left alone (until
+2026-10-29 every `blocklists_*` alias was blocked, cut and removed as the plugin's).
+
 ## Beside os-xgs-npu
 
 `cut.py` and `ja4_cut.py` came from os-xgs-npu (`scripts/xgs/lists_cut.py`, `scripts/xgs/ja4_cut.py`),
 which has not been changed: they still run where it is installed, for the lists and fingerprints
 XGS: Settings names. Here, a list or a fingerprint named there is left to os-xgs-npu, so nothing is
 cut twice; everything else is this plugin's.
+
+## Not yet, and why
+
+- **a QUIC or DTLS client's JA4** - only a TLS client over TCP (`t...`) is cut: `ja4_cut.py` reads
+  the Intrusion Detection's `tls` lines, and a QUIC (`q...`) or DTLS (`d...`) client's fingerprint
+  is not among them. Since 2026-10-29 the field takes `t` fingerprints only; before, such a one was
+  taken and never matched.
+- **the command line's apply writes the aliases only** - `configctl blocklists apply` is the first
+  step of the page's Apply, which then reloads the filter (`configctl filter reload skip_alias`), its
+  template (`configctl template reload OPNsense/Filter`) and the aliases (`configctl filter
+  refresh_aliases`), and runs the cuts once (`configctl blocklists cut`, `configctl blocklists ja4`).
+  From a shell, run those after it, as the tests below did.
+- **a fingerprint listed as the Intrusion Detection begins to log JA4** is watched from the next
+  minute: until then the minute's watch has found nothing to read and ended. Listed while the
+  Intrusion Detection already logs JA4, it is watched within two seconds - since 2026-10-29 the watch
+  goes on through the minute with nothing listed; before, a fingerprint listed during the minute waited
+  for the next one. Not yet tested.
+- **the aliases outlive the plugin** - removed, it leaves them in Firewall: Aliases, blocking nothing,
+  and OPNsense goes on fetching their lists; turn Enabled off and Apply before removing it
+  ([Installation](#installation)).
+- **no list is dropped in an XGS's hardware** - the coprocessor holds no address list of its own to
+  block by (os-xgs-npu's hardware-drop research, issue 519); a cut connection is taken out of the
+  coprocessor with its state.
 
 ## What is tested
 
@@ -112,6 +159,12 @@ the lists fetched, a cut~~ (on 2026-10-29 in qemu, above), ~~a JA4 cut through t
 os-xgs-npu~~ (on 2026-10-29 in qemu, above). ~~The JA4 cut needs Intrusion Detection running with
 its TLS log, which was not set up here.~~ It was, on a second machine's connections (above).
 
+Written after the tests above and not yet tested (2026-10-29): only the plugin's own alias names
+taken for its own; a list watched again cutting what it names, and its snapshot written only when
+its table changed; the JA4 watch going on through the minute with nothing listed, the log read a
+line at a time, and the field taking `t` fingerprints only; the checks before the copy; and the
+removal's stopping of a running cut, its deleting of the state and its emptying of stale tables.
+
 ## Installation
 
 It is not in the OPNsense plugin repository, so there is no `pkg install os-blocklists`.
@@ -122,26 +175,39 @@ It is not in the OPNsense plugin repository, so there is no `pkg install os-bloc
 sh install/install.sh
 ```
 
-It copies `src/` onto `/usr/local` (the rules hook and the cron entry for the cuts with it), checks
-the PHP and the rules hook with `php -l` and the Python with `py_compile`, puts the page in the menu
-(`place-menu.sh`: XGS with os-xgs-npu, Firewall without) and records the commit for the
-self-update. Safe to run again: the settings in config.xml are kept. Nothing is blocked until lists
-are chosen on the page and applied. `sh install/uninstall.sh` removes the plugin and its rules; the
-`blocklists_*` aliases stay in Firewall: Aliases, blocking nothing.
+It ~~copies `src/` onto `/usr/local` (the rules hook and the cron entry for the cuts with it), checks
+the PHP and the rules hook with `php -l` and the Python with `py_compile`,~~ checks the PHP and the
+rules hook with `php -l` and the Python with `py_compile` before anything is copied (since
+2026-10-29: checked after the copy, a hook with an error stayed where every filter reload includes
+it), then copies `src/` onto `/usr/local` (the rules hook and the cron entry for the cuts with it),
+puts the page in the menu (`place-menu.sh`: XGS with os-xgs-npu, Firewall without) and records the
+commit for the self-update. Safe to run again: the settings in config.xml are kept. Nothing is
+blocked until lists are chosen on the page and applied. `sh install/uninstall.sh` removes the plugin
+and its rules; the `blocklists_*` aliases stay in Firewall: Aliases, blocking nothing, and OPNsense
+goes on fetching their lists once a day.
+
+**Before removing it**, turn **Enabled** off and **Apply** to take the aliases away as well: the
+Apply removes each alias of the plugin's that nothing else names (one that a rule of the owner's
+names is switched off instead). The removal itself, by the script or by pkg, stops a cut that is
+running, deletes what the cuts kept in `/var/db/os-blocklists`, and empties the pf table of each of
+the plugin's aliases that is gone, when no rule uses it - a table outlives its alias, and went on
+holding the addresses (all of this since 2026-10-29).
 
 **From a release's package.** A release carries `os-blocklists-<version>.pkg` and `SHA256SUMS`,
-built by `tools/make-package.sh` in the release workflow; installing it has not been tested yet.
+built by `tools/make-package.sh` in the release workflow; ~~installing it has not been tested yet~~
+it was added with pkg on a plain OPNsense on 2026-10-29 - see [What is tested](#what-is-tested).
 Check it and read it before adding it, as root:
 
 ```sh
 sha256sum -c SHA256SUMS
-pkg info -lF os-blocklists-1.0.0.pkg      # every file it will write
-pkg add os-blocklists-1.0.0.pkg
+pkg info -lF os-blocklists-*.pkg       # every file it will write
+pkg add os-blocklists-*.pkg
 ```
 
 `pkg delete os-blocklists` takes the rules hook with the files and reloads the filter, so the rules
-leave pf; the settings and the `blocklists_*` aliases stay, blocking nothing. The same package is built on
-the firewall from a checkout with `sh tools/make-package.sh -o /tmp`.
+leave pf; the settings and the `blocklists_*` aliases stay, blocking nothing (see **Before removing
+it**, above). The same package is built on the firewall from a checkout with
+`sh tools/make-package.sh -o /tmp`.
 
 ## Updates
 

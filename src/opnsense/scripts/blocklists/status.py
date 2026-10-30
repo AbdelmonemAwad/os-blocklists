@@ -21,6 +21,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import cut                                                               # noqa: E402
 import ja4_cut                                                           # noqa: E402
 
 CONFIG = '/conf/config.xml'
@@ -75,10 +76,13 @@ def main():
     enabled = general is None or (general.findtext('enabled') or '1') == '1'
     feeds = load(FEEDS, {})
     pf = tables()
+    # the aliases this plugin makes, as cut.py, apply.php and the rules hook count them: one of the
+    # owner's by another blocklists_ name is not shown as one of its lists
+    mine = cut.owned(FEEDS)
     lists = []
     for alias in root.findall('OPNsense/Firewall/Alias/aliases/alias'):
         name = alias.findtext('name') or ''
-        if not name.startswith(PREFIX):
+        if name not in mine:
             continue
         feed = feeds.get(name[len(PREFIX):], {})
         counters = pf.get(name, {})
@@ -104,7 +108,7 @@ def main():
                 'description': item.findtext('description') or '',
             })
 
-    listed, problem, bad = ja4_cut.settings()
+    listed, problem, bad, _ = ja4_cut.settings()
     project_ja4 = [f for f in re.split(r'[\s,]+', root.findtext('OPNsense/XGS/general/cut_ja4') or '') if f]
     project_lists = [u for u in (root.findtext('OPNsense/XGS/general/cut_lists') or '').split(',') if u.strip()]
 

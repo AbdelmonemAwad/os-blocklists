@@ -5,7 +5,10 @@
 # Every minute: the connections already open to an address one of this plugin's lists has just
 # gained are cut (cut.py, when "Cut open connections" is on), and the TLS connections whose client
 # shows a listed JA4 fingerprint are cut, the log read every two seconds through the minute
-# (ja4_cut.py). With nothing to watch, each reads config.xml once and exits.
+# (ja4_cut.py). With nothing to watch cut.py reads config.xml once and exits; ja4_cut.py exits so
+# when Block Lists is off or the Intrusion Detection does not log JA4, and otherwise looks at
+# config.xml's time every two seconds through the minute even with nothing listed, so a fingerprint
+# listed during the minute is watched within two seconds (2026-10-29).
 
 * * * * * root /usr/local/opnsense/scripts/blocklists/cut.py > /dev/null 2>&1
 * * * * * root /usr/local/opnsense/scripts/blocklists/ja4_cut.py --for 58 > /dev/null 2>&1

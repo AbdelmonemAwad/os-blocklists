@@ -77,7 +77,7 @@
         function draw(data) {
             const $cards = $('#bl-cards').empty();
             if (!data || data.error) {
-                $cards.append(card('bad', 'fa-ban', "{{ lang._('Block Lists') }}", "{{ lang._('The status could not be read.') }}", ''));
+                $cards.append(card('bad', 'fa-ban', "{{ lang._('Block Lists') }}", "{{ lang._('Status could not be read.') }}", ''));
                 return;
             }
             const lists = data.lists.filter(function (l) { return l.enabled; });
@@ -90,7 +90,7 @@
                 no_geoip ? "{{ lang._('no GeoIP source set') }}" :
                     count(entries) + ' ' + "{{ lang._('addresses and networks') }}" + (countries.length ? ' · ' + countries.join(' ') : '')));
             $cards.append(card(blocked ? 'ok' : '', 'fa-ban', "{{ lang._('Blocked') }}", count(blocked),
-                "{{ lang._('packets since the tables were loaded') }}"));
+                "{{ lang._('packets since tables loaded') }}"));
             const dnsOn = data.dns.lists.filter(function (l) { return l.enabled; }).length;
             $cards.append(card(dnsOn && data.dns.enabled ? 'ok' : '', 'fa-filter', "{{ lang._('DNS lists') }}",
                 String(dnsOn), data.dns.enabled ? "{{ lang._('in Unbound DNS') }}" : "{{ lang._('Unbound DNS is off') }}"));
@@ -295,7 +295,7 @@
             {{ lang._('Last run') }}: <span id="bl-ja4-last">-</span>
         </div>
         <div style="padding: 10px 15px;">
-            <button class="btn btn-default" id="seenAct" type="button">{{ lang._('Show the fingerprints seen') }}</button>
+            <button class="btn btn-default" id="seenAct" type="button">{{ lang._('Show fingerprints seen') }}</button>
         </div>
         <div id="bl-seen" style="display: none;">
             <table id="grid-seen" class="table table-condensed table-hover table-striped table-responsive">

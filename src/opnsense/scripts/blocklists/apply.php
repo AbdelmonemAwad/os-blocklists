@@ -6,11 +6,13 @@
  * Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
  *
  * Make the firewall's aliases say what the settings say: one URL Table alias for each feed chosen,
- * one GeoIP alias for the countries, all named blocklists_* and owned by this plugin. An alias whose
- * feed is no longer chosen is removed - or, when something else in config.xml still names it, left
- * in place switched off, so no rule of the owner's is left pointing at nothing. The block rules are
- * not written here: plugins.inc.d/blocklists.inc registers them from these aliases at every filter
- * reload, so they are never among the owner's own rules.
+ * one GeoIP alias for the countries, named blocklists_<id> and blocklists_countries and owned by this
+ * plugin - those names only: an alias of the owner's by another blocklists_ name is his, and is left
+ * alone (2026-10-29; every blocklists_* alias was taken for the plugin's before). An alias whose feed
+ * is no longer chosen is removed - or, when something else in config.xml still names it or holds its
+ * uuid, left in place switched off, so no rule or setting of the owner's is left pointing at nothing.
+ * The block rules are not written here: plugins.inc.d/blocklists.inc registers them from these
+ * aliases at every filter reload, so they are never among the owner's own rules.
  *
  *   apply.php     print a JSON summary; the page's Apply then reloads the filter and the aliases
  */
@@ -23,7 +25,17 @@ use OPNsense\BlockLists\BlockLists;
 
 const PREFIX = 'blocklists_';
 
-$feeds = json_decode(file_get_contents(__DIR__ . '/feeds.json'), true) ?: [];
+$feeds = json_decode((string)@file_get_contents(__DIR__ . '/feeds.json'), true);
+if (!is_array($feeds)) {
+    /* without the catalogue nothing here knows which aliases are the plugin's, so none is touched */
+    echo json_encode(['status' => 'failed', 'changes' => [], 'errors' => ['feeds.json could not be read']]) . "\n";
+    exit(0);
+}
+/* the names this plugin makes, and so owns - the set cut.py, status.py and the rules hook use too */
+$owned = [PREFIX . 'countries' => true];
+foreach (array_keys($feeds) as $id) {
+    $owned[PREFIX . $id] = true;
+}
 $settings = new BlockLists();
 $on = (string)$settings->general->enabled === '1';
 
@@ -52,11 +64,18 @@ $report = [];
 
 foreach (iterator_to_array($model->aliases->alias->iterateItems()) as $uuid => $alias) {
     $name = (string)$alias->name;
-    if (strpos($name, PREFIX) !== 0 || isset($want[$name])) {
+    if (!isset($owned[$name]) || isset($want[$name])) {
         continue;
     }
-    /* named once by its own definition; any more is somebody else's reference */
-    if (preg_match_all('/\b' . preg_quote($name, '/') . '\b/', $text) > 1) {
+    /*
+     * Named once by its own definition, its uuid held once by its own element: any more is somebody
+     * else's reference. A rule names an alias; a model's relation field holds its uuid - os-xgs-npu's
+     * XGS: Settings does, for the lists it cuts, and such an alias was removed here until 2026-10-29,
+     * leaving that setting holding nothing.
+     */
+    $named = preg_match_all('/\b' . preg_quote($name, '/') . '\b/', $text) > 1;
+    $held = substr_count($text, (string)$uuid) > 1;
+    if ($named || $held) {
         $alias->enabled = '0';
         $report[] = $name . ': no longer chosen, but named elsewhere in the configuration - switched off, not removed';
     } else {
