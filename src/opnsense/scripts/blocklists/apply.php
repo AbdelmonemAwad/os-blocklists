@@ -11,6 +11,9 @@
  * alone (2026-10-29; every blocklists_* alias was taken for the plugin's before). An alias whose feed
  * is no longer chosen is removed - or, when something else in config.xml still names it or holds its
  * uuid, left in place switched off, so no rule or setting of the owner's is left pointing at nothing.
+ * Each feed's alias is fetched again as often as "Fetch the lists" says, never more often than its
+ * publisher allows (updatefreq.php); an alias made before is given the frequency here too, so the
+ * next Apply after an update changes it (until 2026-11-17 every alias was fetched once a day).
  * The block rules are not written here: plugins.inc.d/blocklists.inc registers them from these
  * aliases at every filter reload, so they are never among the owner's own rules.
  *
@@ -18,6 +21,7 @@
  */
 
 require_once('script/load_phalcon.php');
+require_once(__DIR__ . '/updatefreq.php');
 
 use OPNsense\Core\Config;
 use OPNsense\Firewall\Alias;
@@ -38,6 +42,7 @@ foreach (array_keys($feeds) as $id) {
 }
 $settings = new BlockLists();
 $on = (string)$settings->general->enabled === '1';
+$refresh = (string)$settings->general->refresh;
 
 $want = [];
 if ($on) {
@@ -45,7 +50,7 @@ if ($on) {
         if (isset($feeds[$id])) {
             $want[PREFIX . $id] = [
                 'type' => 'urltable', 'content' => $feeds[$id]['url'], 'proto' => $feeds[$id]['proto'],
-                'updatefreq' => (string)$feeds[$id]['days'], 'description' => 'Block Lists: ' . $feeds[$id]['name'],
+                'updatefreq' => blocklists_updatefreq($feeds[$id], $refresh), 'description' => 'Block Lists: ' . $feeds[$id]['name'],
             ];
         }
     }

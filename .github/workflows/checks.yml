@@ -50,6 +50,10 @@ jobs:
       - name: The rules hook registers what it should
         run: php tools/test-rules.php
 
+      # How often each feed is fetched: the page's choice or its publisher's minimum, the longer.
+      - name: Each list fetched no more often than its publisher allows
+        run: php tools/test-refresh.php
+
       # cut.py and ja4_cut.py with a stand-in for os-xgs-npu's hwdrop.py: called once, before the
       # pf states are killed, and nothing changed without it.
       - name: The cuts drop in hardware where os-xgs-npu is

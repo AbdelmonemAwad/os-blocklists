@@ -47,7 +47,19 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
 - **address lists** - chosen from a short catalogue of public feeds (`feeds.json`), each answered
   `200` and read as addresses on 2026-10-22: Spamhaus DROP (IPv4 and IPv6), abuse.ch Feodo Tracker,
   Emerging Threats compromised hosts, CINS Army, blocklist.de. Each becomes a URL Table alias of its
-  own, `blocklists_<id>`, fetched by OPNsense once a day, with counters on;
+  own, `blocklists_<id>`, with counters on, fetched by OPNsense again every two hours by default
+  (below);
+- **how often the lists are fetched** - "Fetch the lists": every 2 hours (the default), 6, 12 or 24,
+  but never more often than a list's publisher allows, kept for each list in `feeds.json`
+  (`min_hours`): Spamhaus DROP and DROPv6 once a day (Spamhaus's DROP FAQ); Feodo Tracker no more
+  often than every 15 minutes (abuse.ch generates it every 5 and recommends fetching it at least
+  every 15); blocklist.de no more often than every 30 minutes (it is generated that often); Emerging
+  Threats and CINS Army, which publish no rule, once a day. So with the default, Feodo Tracker and
+  blocklist.de are fetched every two hours and the others once a day. The longer of the two is written into the alias's `updatefreq`, in
+  days with a fraction as OPNsense 26.7 takes it (0.083333 for two hours; OPNsense's alias updater
+  checks every minute and takes anything under a second for never, which nothing here comes near).
+  Until 2026-11-17 every list was fetched once a day; **an alias made before keeps its old frequency
+  until the plugin's next Apply**, which writes the new one into every alias it owns;
 - **countries** - one GeoIP alias, `blocklists_countries` (it needs a GeoIP source in Firewall:
   Aliases);
 - **the block rules** - registered by the plugin at every filter reload (`plugins.inc.d/blocklists.inc`,
@@ -231,7 +243,7 @@ puts the page in the menu (`place-menu.sh`: XGS with os-xgs-npu, Firewall withou
 commit for the self-update. Safe to run again: the settings in config.xml are kept. Nothing is
 blocked until lists are chosen on the page and applied. `sh install/uninstall.sh` removes the plugin
 and its rules; the `blocklists_*` aliases stay in Firewall: Aliases, blocking nothing, and OPNsense
-goes on fetching their lists once a day.
+goes on fetching their lists as often as they last said.
 
 **Before removing it**, turn **Enabled** off and **Apply** to take the aliases away as well: the
 Apply removes each alias of the plugin's that nothing else names (one that a rule of the owner's

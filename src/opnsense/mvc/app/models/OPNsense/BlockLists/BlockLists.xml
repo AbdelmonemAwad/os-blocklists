@@ -29,6 +29,20 @@
                     <blocklist_de>blocklist.de (all)</blocklist_de>
                 </OptionValues>
             </feeds>
+            <!--
+                How often each feed's alias is fetched again (scripts/blocklists/updatefreq.php): the
+                longer of this and the feed's own minimum in feeds.json. The keys are read there.
+            -->
+            <refresh type="OptionField">
+                <Required>Y</Required>
+                <Default>h2</Default>
+                <OptionValues>
+                    <h2>Every 2 hours</h2>
+                    <h6>Every 6 hours</h6>
+                    <h12>Every 12 hours</h12>
+                    <h24>Once a day</h24>
+                </OptionValues>
+            </refresh>
             <countries type="CountryField">
                 <Multiple>Y</Multiple>
                 <Required>N</Required>

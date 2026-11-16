@@ -13,7 +13,13 @@
         <id>blocklists.general.feeds</id>
         <label>Address lists</label>
         <type>select_multiple</type>
-        <help>Public lists of addresses to block, each fetched by the firewall once a day into an alias of its own (blocklists_...). The Lists tab says what each one is and whose terms it comes under.</help>
+        <help>Public lists of addresses to block, each fetched by the firewall into an alias of its own (blocklists_...), as often as the next setting says. The Lists tab says what each one is and whose terms it comes under.</help>
+    </field>
+    <field>
+        <id>blocklists.general.refresh</id>
+        <label>Fetch the lists</label>
+        <type>dropdown</type>
+        <help>How often the firewall fetches each address list again. A list is never fetched more often than its publisher allows: Spamhaus DROP once a day, as Spamhaus asks, and Emerging Threats and CINS Army, which publish no rule, once a day too. A change reaches the lists at the next Apply.</help>
     </field>
     <field>
         <id>blocklists.general.countries</id>
