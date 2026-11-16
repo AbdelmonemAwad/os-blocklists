@@ -12,6 +12,21 @@
  *
  * Inbound: from a listed address, on every interface. Both ways (the default): to a listed address as
  * well, so a host inside cannot reach one either.
+ *
+ * A command-and-control list (feeds.json "c2": true) has one more rule when outbound is blocked,
+ * registered before the table's others: `block in log quick ... to <blocklists_<id>>`, described
+ * "Block Lists: blocklists_<id> from inside", logged whatever the "log" setting. The "out" rule
+ * matches where the packet leaves the firewall, after outbound NAT, so behind NAT its log line names
+ * the firewall's own WAN address (seen on an XGS 3300, 2026-11-17) and not the device; this one
+ * matches where the packet enters from the LAN, before NAT, and its log line carries the device's own
+ * address - os-netreport reads it by that description (from /tmp/rules.debug, so the rule keeps the
+ * label OPNsense gives it). One log line per blocked packet, about 220 bytes (270 for TCP): a device
+ * that keeps trying grows the filter log by that much a try.
+ *
+ * Order (OPNsense 26.7, Firewall\Plugin): registerFilterRule() files a rule under its priority, the
+ * rules are written priority by priority (ksort), and within one priority in the order registered.
+ * Every rule here is priority 1, so "from inside" is first for its table; quick, the first match is
+ * the last.
  */
 
 use OPNsense\Firewall\Alias;
@@ -34,10 +49,15 @@ function blocklists_firewall(Plugin $fw)
      * name - a list of exceptions, say - was blocked both ways before his own rules.
      */
     $owned = ['blocklists_countries' => true];
-    $feeds = json_decode((string)@file_get_contents('/usr/local/opnsense/scripts/blocklists/feeds.json'), true);
+    $c2 = [];
+    $path = defined('BLOCKLISTS_FEEDS') ? BLOCKLISTS_FEEDS : '/usr/local/opnsense/scripts/blocklists/feeds.json';
+    $feeds = json_decode((string)@file_get_contents($path), true);
     if (is_array($feeds)) {
-        foreach (array_keys($feeds) as $id) {
+        foreach ($feeds as $id => $feed) {
             $owned['blocklists_' . $id] = true;
+            if (is_array($feed) && ($feed['c2'] ?? false) === true) {
+                $c2['blocklists_' . $id] = true;
+            }
         }
     } else {
         syslog(LOG_ERR, 'Block Lists: feeds.json could not be read; only the countries are blocked');
@@ -57,6 +77,17 @@ function blocklists_firewall(Plugin $fw)
             $families[] = 'inet6';
         }
         foreach ($families as $family) {
+            if ($both && isset($c2[$name])) {
+                $fw->registerFilterRule(1, [
+                    'ipprotocol' => $family,
+                    'descr' => 'Block Lists: ' . $name . ' from inside',
+                    'to' => '<' . $name . '>',
+                    'direction' => 'in',
+                    'type' => 'block',
+                    'log' => true,
+                    'quick' => true,
+                ]);
+            }
             $fw->registerFilterRule(1, [
                 'ipprotocol' => $family,
                 'descr' => 'Block Lists: ' . $name . ' in',

@@ -39,6 +39,17 @@ jobs:
       - name: self-update.py takes a release only as signed
         run: python3 tools/test-self-update.py
 
+  rules:
+    name: rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The rule set plugins.inc.d/blocklists.inc registers, with stand-ins for OPNsense's classes:
+      # a command-and-control list's "from inside" rule, its description, its place, its log.
+      - name: The rules hook registers what it should
+        run: php tools/test-rules.php
+
   syntax:
     name: syntax
     runs-on: ubuntu-latest

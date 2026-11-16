@@ -31,7 +31,7 @@
         <id>blocklists.general.log</id>
         <label>Log blocked packets</label>
         <type>checkbox</type>
-        <help>Write every packet the rules block to the firewall log. A long list blocks a lot.</help>
+        <help>Write every packet the rules block to the firewall log. A long list blocks a lot. A device inside trying to reach a command-and-control list (Feodo Tracker) is logged whatever this says, by its own address, so it can be found.</help>
     </field>
     <field>
         <id>blocklists.general.cut</id>

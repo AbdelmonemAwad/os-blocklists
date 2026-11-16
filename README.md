@@ -54,6 +54,18 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
   as os-crowdsec does): inbound from a listed address, and by default outbound to one, on every
   interface, before the interface rules. They are never added to the owner's own rules, so turning
   the plugin off or removing it leaves nothing there;
+- **a device reaching a command-and-control list, logged by its own address** - a list marked
+  `"c2": true` in `feeds.json` (Feodo Tracker today) gets one more rule while outbound is blocked
+  (Both ways): `block in log quick` from any to `<blocklists_<id>>`, on every interface, described
+  `Block Lists: blocklists_<id> from inside`, logged whatever "Log blocked packets" says, and before
+  the list's other rules (all are priority 1, and OPNsense 26.7 writes one priority's rules in the
+  order they were registered). Why: the outbound rule matches where a packet leaves the firewall,
+  after outbound NAT, so behind NAT its log line names the firewall's WAN address, never the device
+  (seen on an XGS 3300, 2026-11-17); this one matches where the packet comes in from the LAN, before
+  NAT, and its line carries the device's own address - os-netreport's command-and-control alert reads
+  it by that description. It writes one line to the filter log for every packet it blocks, about 220
+  bytes (270 for TCP), and keeps no state, so an infected device that retries all day grows the log
+  by that much each try: at one try a second about 23 MB a day, kept 31 days by OPNsense's default;
 - **open connections cut** - a block rule stops new connections only; with "Cut open connections"
   on, a connection already open to or from an address a list has just gained is cut within a
   minute (`cut.py`), and on a Sophos XGS taken out of the coprocessor with its state;

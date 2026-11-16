@@ -20,6 +20,7 @@
   "url": "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.txt",
   "proto": "IPv4",
   "days": 1,
+  "c2": true,
   "what": "Command servers of botnets (Dridex, Emotet, QakBot and others) seen active, as abuse.ch recommends blocking them.",
   "terms": "https://abuse.ch/terms-of-use/"
  },
