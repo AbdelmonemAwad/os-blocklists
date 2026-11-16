@@ -28,9 +28,16 @@ what it names, as its first run did. Until 2026-10-29 it was kept, and a connect
 list was off was compared with it, found old, and never cut. It is written only when the table
 changed - a list of 15,000 entries was rewritten every minute, a third of a megabyte each time - and
 by one run at a time: the page's Apply and the minute's run wrote the same files.
+
+Cut in hardware too (2026-11-17): where os-xgs-npu is installed, its hwdrop.drop_addresses() is
+called before the pf states are killed, once a run with every list's new entries, as its own
+lists_cut.py does - with XGS: Settings "Cut in hardware" on, the coprocessor drops those connections
+at once, both ways. It returns how many it dropped, 0 with the setting off or no driver table, and
+the count is in the summary and the system log. Without os-xgs-npu nothing changes. See hwdrop().
 """
 import bisect
 import fcntl
+import importlib.util
 import ipaddress
 import json
 import os
@@ -50,6 +57,7 @@ PFCTL = '/sbin/pfctl'
 TAG = 'blocklists'
 PREFIX = 'blocklists_'
 WAIT = 10           # seconds a run waits for another to end, then leaves the cutting to the next minute
+HWDROP = '/usr/local/opnsense/scripts/xgs/hwdrop.py'    # os-xgs-npu's, where it is installed
 
 
 def log(message):
@@ -57,6 +65,43 @@ def log(message):
         subprocess.run(['/usr/bin/logger', '-t', TAG, '-p', 'daemon.notice', message], timeout=10)
     except (OSError, subprocess.SubprocessError):
         pass
+
+
+def hwdrop(path=None):
+    """os-xgs-npu's hwdrop module, loaded from its installed place and not copied; None when it is not
+    there or does not load. Loaded only when a run has something to cut, so after everything this
+    imports: hwdrop puts its own folder first on the module search path to import its flows.py, where a
+    later `import status` would find os-xgs-npu's status.py - the path is put back as it was once it has
+    loaded. Its functions need root, as cron and configd run this."""
+    path = path or HWDROP
+    if not os.path.isfile(path):
+        return None
+    saved = list(sys.path)
+    try:
+        spec = importlib.util.spec_from_file_location('xgs_hwdrop', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except Exception as e:
+        log(f'os-xgs-npu\'s hwdrop.py could not be loaded, nothing dropped in hardware: {e}')
+        return None
+    finally:
+        sys.path[:] = saved
+
+
+def drop_in_hardware(networks):
+    """Connections with either end in `networks` dropped on the coprocessor, by os-xgs-npu's hwdrop:
+    how many, or None without os-xgs-npu. One call, which reads the whole flow table."""
+    hw = hwdrop()
+    if hw is None:
+        return None
+    try:
+        n = int(hw.drop_addresses(Matcher(networks)) or 0)
+    except Exception as e:      # it says it never raises; a cut is not stopped by it if it does
+        log(f'dropping in hardware failed: {e}')
+        return 0
+    log(f"{n} connection{'' if n == 1 else 's'} dropped in hardware")
+    return n
 
 
 def owned(path=FEEDS):
@@ -244,6 +289,10 @@ def run():
         summary['lists'][name] = {'entries': len(now), 'added': len(new), 'cut': 0}
 
     if any(added.values()):
+        # on the coprocessor first, once for every list's new entries, where os-xgs-npu is installed
+        dropped = drop_in_hardware(set().union(*added.values()))
+        if dropped is not None:
+            summary['dropped'] = dropped
         try:
             text = subprocess.run([PFCTL, '-ss', '-vv'], capture_output=True, text=True, timeout=120).stdout
         except (OSError, subprocess.SubprocessError):
@@ -290,6 +339,8 @@ def run():
             parts.append(f"{name} ({info['error']})" if 'error' in info else
                          f"{name} ({info['entries']} entries, {info['cut']} cut now, {totals.get(name, 0)} in all)")
         summary['message'] = 'cut when listed: ' + ', '.join(parts)
+        if 'dropped' in summary:
+            summary['message'] += f"; {summary['dropped']} dropped in hardware now"
     save(STATUS, summary)
     return summary
 

@@ -40,7 +40,7 @@ jobs:
         run: python3 tools/test-self-update.py
 
   rules:
-    name: rules
+    name: rules and cuts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -49,6 +49,11 @@ jobs:
       # a command-and-control list's "from inside" rule, its description, its place, its log.
       - name: The rules hook registers what it should
         run: php tools/test-rules.php
+
+      # cut.py and ja4_cut.py with a stand-in for os-xgs-npu's hwdrop.py: called once, before the
+      # pf states are killed, and nothing changed without it.
+      - name: The cuts drop in hardware where os-xgs-npu is
+        run: python3 tools/test-hwdrop.py
 
   syntax:
     name: syntax

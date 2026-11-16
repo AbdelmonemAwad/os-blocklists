@@ -37,8 +37,16 @@ for it. Never fails its caller; what it could not do is in the summary and in th
 The log is read a line at a time and only what is looked for is kept (2026-10-29): every TLS line of
 it was held in memory before anything was looked at, so a log of a week of TLS was held whole - by
 --seen at every press of the page's button, and by the search for a fingerprint just listed.
+
+Cut in hardware too (2026-11-17): where os-xgs-npu is installed, its hwdrop.drop_ends() is called
+before the pf states are killed, once a reading with the ends of every state being cut, each state's
+apart and with its protocol, as its own ja4_cut.py does - with XGS: Settings "Cut in hardware" on,
+the coprocessor drops those connections at once, both ways. It returns how many it dropped, 0 with
+the setting off or no driver table, and the count is in the summary and the system log. Without
+os-xgs-npu nothing changes. See hwdrop().
 """
 import fcntl
+import importlib.util
 import ipaddress
 import json
 import os
@@ -59,6 +67,7 @@ TAG = 'blocklists-ja4'
 EVERY = 2           # seconds between two readings of the log in --for
 SLACK = 5           # seconds a state may be younger than its log line: Suricata stamps the packet
 SEEN_TAIL = 64 * 1024 * 1024    # bytes of the log --seen reads, back from its end
+HWDROP = '/usr/local/opnsense/scripts/xgs/hwdrop.py'    # os-xgs-npu's, where it is installed
 
 # protocol, TLS version, SNI or not, cipher and extension counts, the ALPN's first and last character;
 # then the two truncated hashes - https://github.com/FoxIO-LLC/ja4. The protocol is t, TLS over TCP,
@@ -72,6 +81,50 @@ def log(message):
         subprocess.run(['/usr/bin/logger', '-t', TAG, '-p', 'daemon.notice', message], timeout=10)
     except (OSError, subprocess.SubprocessError):
         pass
+
+
+_hwdrop = {}
+
+
+def hwdrop(path=None):
+    """os-xgs-npu's hwdrop module, loaded from its installed place and not copied, once a process; None
+    when it is not there or does not load. Loaded only when a reading has something to cut, so after
+    everything this imports: hwdrop puts its own folder first on the module search path to import its
+    flows.py, where a later `import status` would find os-xgs-npu's status.py - the path is put back as
+    it was once it has loaded. Its functions need root, as cron and configd run this."""
+    path = path or HWDROP
+    if path in _hwdrop:
+        return _hwdrop[path]
+    module = None
+    if os.path.isfile(path):
+        saved = list(sys.path)
+        try:
+            spec = importlib.util.spec_from_file_location('xgs_hwdrop', path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+        except Exception as e:
+            log(f'os-xgs-npu\'s hwdrop.py could not be loaded, nothing dropped in hardware: {e}')
+            module = None
+        finally:
+            sys.path[:] = saved
+    _hwdrop[path] = module
+    return module
+
+
+def drop_in_hardware(groups):
+    """Connections both of whose ends are in one group - (protocol, ends) of one state being cut -
+    dropped on the coprocessor, by os-xgs-npu's hwdrop: how many, or None without os-xgs-npu. One call,
+    which reads the whole flow table."""
+    hw = hwdrop()
+    if hw is None:
+        return None
+    try:
+        n = int(hw.drop_ends(groups) or 0)
+    except Exception as e:      # it says it never raises; a cut is not stopped by it if it does
+        log(f'dropping in hardware failed: {e}')
+        return 0
+    log(f"{n} connection{'' if n == 1 else 's'} dropped in hardware")
+    return n
 
 
 def settings():
@@ -279,7 +332,14 @@ class Watch:
             log(f"{len(matched)} connection{'' if len(matched) == 1 else 's'} with a listed fingerprint "
                 "not cut: pfctl -ss could not be read")
             return summary
-        cuts = to_cut(matched, states(text), time.time())
+        all_states = states(text)
+        cuts = to_cut(matched, all_states, time.time())
+        # on the coprocessor first, where os-xgs-npu is installed: each state's ends apart, with its
+        # protocol, as os-xgs-npu's ja4_cut.py gives them
+        groups = [(proto, ends) for sid, proto, ends, _age, _over in all_states if sid in cuts]
+        dropped = drop_in_hardware(groups) if groups else None
+        if dropped is not None:
+            summary['dropped'] = dropped
         per_conn = {}
         totals = st.setdefault('totals', {})
         for sid, ev in cuts.items():
@@ -307,6 +367,8 @@ class Watch:
             text = (f"{n} fingerprint{'' if n == 1 else 's'} listed, "
                     f"{summary.get('connections', 0)} connection{'' if summary.get('connections', 0) == 1 else 's'} cut now, "
                     f"{sum(self.status.get('totals', {}).get(f, 0) for f in self.listed)} in all")
+        if 'dropped' in summary:
+            text += f"; {summary['dropped']} dropped in hardware now"
         if self.listed and self.problem:
             text += ' - ' + self.problem
         if self.bad:
@@ -369,10 +431,13 @@ def main(argv):
         w = Watch()
         until = time.monotonic() + seconds
         cut = conns = 0
+        dropped = None
         while True:
             summary = w.once()
             cut += summary['cut']
             conns += summary.get('connections', 0)
+            if 'dropped' in summary:
+                dropped = (dropped or 0) + summary['dropped']
             # Off, or the IDS not logging JA4: the next minute's run looks again. Nothing listed is no
             # reason to stop (2026-10-29): the minute's watch stopped then, and a fingerprint listed
             # during the minute waited for the next one - the page's own run found the lock free but
@@ -383,6 +448,8 @@ def main(argv):
                 break
             time.sleep(EVERY)
         summary['cut'], summary['connections'] = cut, conns
+        if dropped is not None:
+            summary['dropped'] = dropped
         summary['message'] = w.message(summary)
         w.status['last'] = summary
         w.save()

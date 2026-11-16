@@ -68,7 +68,8 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
   by that much each try: at one try a second about 23 MB a day, kept 31 days by OPNsense's default;
 - **open connections cut** - a block rule stops new connections only; with "Cut open connections"
   on, a connection already open to or from an address a list has just gained is cut within a
-  minute (`cut.py`), and on a Sophos XGS taken out of the coprocessor with its state;
+  minute (`cut.py`), and on a Sophos XGS taken out of the coprocessor with its state - or, where
+  os-xgs-npu is installed with its "Cut in hardware" on, dropped on the coprocessor first (below);
 - **JA4** - TLS connections whose client shows a listed fingerprint are cut, read from the
   Intrusion Detection's TLS log every two seconds (`ja4_cut.py`); the page lists the fingerprints
   seen, to find the one to list (those in the log's last 64 MB, since 2026-10-29);
@@ -94,6 +95,16 @@ which has not been changed: they still run where it is installed, for the lists 
 XGS: Settings names. Here, a list or a fingerprint named there is left to os-xgs-npu, so nothing is
 cut twice; everything else is this plugin's.
 
+**Cut in hardware too** (since 2026-11-17). Where os-xgs-npu is installed
+(`/usr/local/opnsense/scripts/xgs/hwdrop.py` is there), `cut.py` and `ja4_cut.py` call its hardware
+drop before they kill the pf states, as its own `lists_cut.py` and `ja4_cut.py` do: `cut.py` once a
+run with every list's new entries (`hwdrop.drop_addresses`), `ja4_cut.py` once a reading with each
+cut state's ends and protocol (`hwdrop.drop_ends`). With XGS: Settings "Cut in hardware" on, the
+coprocessor drops those connections at once, both ways; off, or with no driver table, it drops
+nothing and says 0. The module is loaded from os-xgs-npu's place, not copied, and only when there is
+something to cut; the count is in the summary, the page's "Open connections" line and the system log
+(`N connections dropped in hardware`). Without os-xgs-npu nothing changes.
+
 ## Not yet, and why
 
 - **a QUIC or DTLS client's JA4** - only a TLS client over TCP (`t...`) is cut: `ja4_cut.py` reads
@@ -115,7 +126,8 @@ cut twice; everything else is this plugin's.
   ([Installation](#installation)).
 - **no list is dropped in an XGS's hardware** - the coprocessor holds no address list of its own to
   block by (os-xgs-npu's hardware-drop research, issue 519); a cut connection is taken out of the
-  coprocessor with its state.
+  coprocessor with its state, and with os-xgs-npu's "Cut in hardware" on it is dropped there first
+  ([Beside os-xgs-npu](#beside-os-xgs-npu)) - a connection, not the list.
 
 ## What is tested
 
