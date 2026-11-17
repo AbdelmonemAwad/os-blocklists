@@ -48,7 +48,8 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
   `200` and read as addresses on 2026-10-22: Spamhaus DROP (IPv4 and IPv6), abuse.ch Feodo Tracker,
   Emerging Threats compromised hosts, CINS Army, blocklist.de. Each becomes a URL Table alias of its
   own, `blocklists_<id>`, with counters on, fetched by OPNsense again every two hours by default
-  (below);
+  (below). And since 2026-11-17 ThreatFox's command-and-control addresses, which the plugin fetches
+  itself with an abuse.ch Auth-Key of the owner's (**ThreatFox**, below);
 - **how often the lists are fetched** - "Fetch the lists": every 2 hours (the default), 6, 12 or 24,
   and for each list no more often than the floor kept for it in `feeds.json` (`min_hours`):
   Spamhaus DROP and DROPv6 once a day (Spamhaus's DROP FAQ); Feodo Tracker every 15 minutes at the
@@ -69,7 +70,57 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
   switched off and the owner's own are left as they are. config.xml is saved only when one changed,
   and what it did is in the system log (`blocklists`) and the installer's output (until 2026-11-17 a
   package ran the whole Apply instead, its output thrown away, and an update from XGS: Updates ran
-  nothing);
+  nothing). ThreatFox's list is no URL table, and none of this is its: it keeps abuse.ch's pace (next);
+- **ThreatFox, with an abuse.ch Auth-Key** (since 2026-11-17) - "ThreatFox: command-and-control
+  addresses" in Address lists: the command-and-control servers of malware that abuse.ch's ThreatFox
+  holds, those of the last six months (it expires older ones), as addresses. Since 2025-06-30 abuse.ch
+  serves ThreatFox's exports only with an Auth-Key of the user's own, from a free account at
+  auth.abuse.ch (in its profile, under Optional); it goes in the setting **abuse.ch Auth-Key**.
+  Without a key the list is not made - Apply says so - and nothing is fetched; Feodo Tracker is as it
+  was. No URL table can fetch it (the key in the address, a zipped CSV, `ip:port` entries), so the
+  plugin's `threatfox.py` does, into an external alias, `blocklists_threatfox` (OPNsense's "External
+  (advanced)": OPNsense declares its table and leaves its addresses to the script, which puts the
+  list into it with `pfctl -T replace -f -`, the list on stdin, whenever the table does not hold it -
+  after a reboot too, without a fetch). It is marked `"c2"`, so it has the "from inside" rule below
+  and os-netreport's alert as Feodo Tracker has.
+  - *What is taken*: of an export, the indicators of type `ip:port` with the threat `botnet_cc` only,
+    as addresses, IPv4 and IPv6, each once. A line that is not one is dropped, and so is an address
+    no server on the internet has - private, shared (100.64/10), loopback, link-local, multicast,
+    reserved, unspecified, IPv4-mapped, unique local - which blocked both ways could cut the firewall
+    off its own networks. The confidence ThreatFox gives an indicator is not looked at.
+  - *What is sent to abuse.ch*: the key, in the address of each download -
+    `https://threatfox-api.abuse.ch/v2/files/exports/<key>/full.csv.zip` and `.../recent.csv`, as
+    abuse.ch's export page asks - over HTTPS with the server's certificate checked, and a User-Agent
+    of `os-blocklists`; abuse.ch sees the request come from the firewall's public address, as any
+    server does. Nothing else: no address of its networks, no log, no count, no setting.
+  - *Where the key is*: in config.xml - and so in its backups and in System: Configuration: History,
+    as the other secrets OPNsense keeps are - and nowhere else: not on the page, whose field says only
+    "saved" or "not set" (the settings' answer has it empty: OPNsense's write-only field), not in the
+    system log, the script's answer or its files, not on a command line or in a configd parameter. A
+    text that would carry it, an error naming the address, has it taken out first. An empty field
+    keeps the key; **Remove the key**, beside it, takes it out of config.xml, and Apply then removes
+    the list.
+  - *Its pace, and why*: abuse.ch's Terms of Use give no number - export volumes as reasonably
+    expected for non-commercial or non-profit purposes, and no high-volume automatic harvesting - but
+    its API changelog of 2026-11-12 does for each export whose name holds "full": up to four times its
+    size per account and UTC day, partial and cancelled downloads counted, then 429 until 00:00 UTC;
+    and it asks for each full export once a day and the matching recent export for the updates in
+    between. So the whole export, `full.csv.zip`, is fetched once a day - 24 hours after the last one
+    fetched, and no more than twice begun in a UTC day, a download that broke off included: half of
+    abuse.ch's cap, which is the account's, shared by every firewall and tool that uses it. The recent
+    additions, `recent.csv`, are fetched as often as "Fetch the lists" says - every two hours by
+    default - and never more often than once an hour (`min_hours` in `feeds.json`); the whole export
+    takes the place of the recent additions fetched before it. A fetch that failed waits as long
+    before its next try; one answered 429 waits for the time abuse.ch gives (`Retry-After`; 00:00 UTC
+    without one); after a refused key (401, 403) nothing is sent for a day, or until the next Apply,
+    which tries again at once, for a key just replaced. A cron entry runs the script every five
+    minutes, and it fetches only what is due; the page's Apply runs it too, in the background.
+  - *On a failure* - a download that fails or breaks off, an answer that is not an export, a whole
+    export with no command-and-control address in it - the last good list is kept, in pf and in
+    `/var/db/os-blocklists/threatfox`. The Lists tab's "ThreatFox:" line says what the list holds and
+    from when, and what failed last.
+  - *Commercial use*: abuse.ch's Terms of Use say that companies and others with commercial needs
+    may need a paid subscription for ThreatFox; that is between the owner of the key and abuse.ch.
 - **countries** - one GeoIP alias, `blocklists_countries` (it needs a GeoIP source in Firewall:
   Aliases);
 - **the block rules** - registered by the plugin at every filter reload (`plugins.inc.d/blocklists.inc`,
@@ -77,7 +128,7 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
   interface, before the interface rules. They are never added to the owner's own rules, so turning
   the plugin off or removing it leaves nothing there;
 - **a device reaching a command-and-control list, logged by its own address** - a list marked
-  `"c2": true` in `feeds.json` (Feodo Tracker today) gets one more rule while outbound is blocked
+  `"c2": true` in `feeds.json` (Feodo Tracker and ThreatFox) gets one more rule while outbound is blocked
   (Both ways): `block in log quick` from any to `<blocklists_<id>>`, on the inside interfaces -
   those with an address of their own (a static IPv4 address, or IPv6 static, tracked or by identity
   association) that no gateway names (none in System: Gateways, switched off or not, IPv4 or IPv6,
@@ -285,7 +336,22 @@ update (`fetch-frequency.php`), are to be run on a firewall before this is merge
 Its table drives os-netreport's alert and os-portguard's isolation: OPNsense fetches an alias's URL
 without checking the server's certificate unless "Check certificate of aliases URLs" is on
 (Firewall: Settings: Advanced), and takes any answer of the server's as the list - turn it on where a
-command-and-control list is chosen.
+command-and-control list is chosen. ThreatFox's list is fetched by the plugin itself, the server's
+certificate always checked, and an answer that is not an export is never taken for one.
+
+ThreatFox (2026-11-17) is tested by the checks only - not on a firewall, and not against abuse.ch,
+which needs a real key. `tools/test-threatfox.py` reads a recorded sample of ThreatFox's CSV export,
+made up from documentation addresses, and runs `threatfox.py` with stand-ins for abuse.ch's server,
+pfctl and the system log: the export read zipped or not, by the line naming its columns or by their
+places; abuse.ch's pace over two days; 401, 403 and 429, an empty or broken file, a download cut off,
+too large or too slow, pfctl refusing the list - the last list kept; the key unset, the list not
+chosen, its alias missing - nothing sent; a reboot - the table filled again without a fetch; the key in
+no answer, file or log line. `tools/test-threatfox.php` runs apply.php's alias and Remove the key with
+OPNsense's classes stood in for, `tools/test-status.py` the page's line and the key's field, and
+`tools/test-rules.php` its rules. Each part was undone or broken in a copy of the tree, and a test
+failed for each (71 mutations). To be run on a firewall before this is merged: the page and its key
+field, a real key, the two exports' names and layout as abuse.ch serves them, the answer to a refused
+key, and the table and the inside rule with ThreatFox's addresses.
 
 Still not tested: the snapshot written only when its table changed, the log read a line at a time,
 the field refusing all but `t` fingerprints, the checks before the copy, and the removal.
