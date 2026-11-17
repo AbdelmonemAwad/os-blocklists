@@ -550,6 +550,8 @@ def test_not_ready():
     for name, kwargs, said in (
             ('the key unset', {'key': None}, 'no abuse.ch Auth-Key saved: nothing fetched'),
             ('the key empty', {'key': ''}, 'no abuse.ch Auth-Key saved: nothing fetched'),
+            ('no key and no alias, as Apply leaves it without a key', {'key': None, 'alias': None},
+             'no abuse.ch Auth-Key saved: nothing fetched'),
             ('a key with a slash', {'key': 'test-only/not-a-real-key'},
              'abuse.ch Auth-Key saved is not one (letters, digits, . _ ~ -): nothing fetched'),
             ('the list not chosen', {'feeds': 'feodo'}, 'ThreatFox is not chosen: nothing fetched'),

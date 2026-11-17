@@ -261,6 +261,14 @@ def settings(path=None):
         return 'off', None, None
     if ID not in value('feeds').split(','):
         return 'not chosen', None, None
+    # the key before the alias: Apply makes no alias without a key, so "Apply makes it" would send the owner
+    # to a button that does nothing for it (found on the second XGS 3300, 2026-11-17)
+    key = value('threatfox_key')
+    if not key:
+        return 'no key', None, None
+    _secrets.append(key)
+    if not KEY.fullmatch(key):
+        return 'bad key', None, None
     alias = next((a for a in root.findall('OPNsense/Firewall/Alias/aliases/alias')
                   if a.findtext('name') == ALIAS), None)
     if alias is None:
@@ -269,12 +277,6 @@ def settings(path=None):
         return 'alias off', None, None
     if (alias.findtext('type') or '') != 'external':
         return 'not external', None, None
-    key = value('threatfox_key')
-    if not key:
-        return 'no key', None, None
-    _secrets.append(key)
-    if not KEY.fullmatch(key):
-        return 'bad key', None, None
     feeds = load(FEEDS, {})
     return 'ready', key, pace(value('refresh'), feeds.get(ID) if isinstance(feeds, dict) else None)
 
