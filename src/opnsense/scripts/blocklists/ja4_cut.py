@@ -51,8 +51,10 @@ import ipaddress
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
+import threading
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -111,6 +113,31 @@ def hwdrop(path=None):
     return module
 
 
+HW_DEADLINE = 5             # seconds the hardware step may take; then the pf cut goes on without it
+
+
+class HardwareLate(Exception):
+    pass
+
+
+def within(seconds, what, *args):
+    """what(*args), ended by HardwareLate after seconds - a real-time timer, in the main thread where
+    cron and configd run this; elsewhere what runs as it is. A driver that is slow or stuck must not
+    hold the pf cut, which works on its own."""
+    if not hasattr(signal, 'setitimer') or threading.current_thread() is not threading.main_thread():
+        return what(*args)
+
+    def late(signum, frame):
+        raise HardwareLate()
+    previous = signal.signal(signal.SIGALRM, late)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        return what(*args)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
 def drop_in_hardware(groups):
     """Connections both of whose ends are in one group - (protocol, ends) of one state being cut -
     dropped on the coprocessor, by os-xgs-npu's hwdrop: how many, or None without os-xgs-npu. One call,
@@ -119,7 +146,10 @@ def drop_in_hardware(groups):
     if hw is None:
         return None
     try:
-        n = int(hw.drop_ends(groups) or 0)
+        n = int(within(HW_DEADLINE, hw.drop_ends, groups) or 0)
+    except HardwareLate:
+        log(f'dropping in hardware took more than {HW_DEADLINE} s: left there, the pf cut goes on')
+        return 0
     except Exception as e:      # it says it never raises; a cut is not stopped by it if it does
         log(f'dropping in hardware failed: {e}')
         return 0

@@ -16,8 +16,10 @@ import importlib.util
 import json
 import os
 import shutil
+import signal
 import sys
 import tempfile
+import time
 import types
 from datetime import datetime, timezone
 
@@ -49,6 +51,10 @@ import hwdrop_events  # noqa: E402
 
 def drop_addresses(contains, path='/conf/config.xml'):
     hwdrop_events.events.append(('drop_addresses', sorted(a for a in hwdrop_events.probe if a in contains)))
+    if hwdrop_events.result == 'slow':
+        import time
+        time.sleep(3)
+        return 9
     if hwdrop_events.result is None:
         raise RuntimeError('no table')
     return hwdrop_events.result
@@ -56,6 +62,10 @@ def drop_addresses(contains, path='/conf/config.xml'):
 
 def drop_ends(groups, path='/conf/config.xml'):
     hwdrop_events.events.append(('drop_ends', [(p, sorted(e)) for p, e in groups]))
+    if hwdrop_events.result == 'slow':
+        import time
+        time.sleep(3)
+        return 9
     if hwdrop_events.result is None:
         raise RuntimeError('no table')
     return hwdrop_events.result
@@ -154,6 +164,28 @@ def test_cut(tmp, fake):
     EVENTS.events[:] = []
     cut.run()
     check(kinds(EVENTS.events) == [], 'cut.py: nothing new, nothing dropped or killed')
+
+    # Inbound only: the rules let outbound through - nothing dropped in hardware, the pf cut as before
+    saved_blocked, cut.outbound_blocked = cut.outbound_blocked, lambda path=None: False
+    try:
+        summary, events = cut_run(tmp, fake, 3)
+    finally:
+        cut.outbound_blocked = saved_blocked
+    check('dropped' not in summary and kinds(events) == ['kill', 'kill'],
+          'cut.py: Inbound only - nothing dropped in hardware, the two states killed')
+
+    # a hardware step past its deadline: left, said, and the pf cut goes on
+    if hasattr(signal, 'setitimer'):
+        saved, cut.HW_DEADLINE = cut.HW_DEADLINE, 1
+        started = time.monotonic()
+        try:
+            summary, events = cut_run(tmp, fake, 'slow')
+        finally:
+            cut.HW_DEADLINE = saved
+        check(kinds(events) == ['drop_addresses', 'kill', 'kill'] and summary.get('dropped') == 0 and
+              time.monotonic() - started < 2.5 and
+              any('took more than 1 s' in m for m in logs(events)),
+              'cut.py: a hardware step past its deadline is left at it, said, and the states killed')
 
     # a hwdrop.py that does not load
     broken = os.path.join(tmp, 'broken', 'hwdrop.py')
