@@ -96,5 +96,267 @@ check(strpos($form, '<id>blocklists.general.refresh</id>') !== false, 'the form 
 $apply = file_get_contents($root . '/src/opnsense/scripts/blocklists/apply.php');
 check(strpos($apply, "blocklists_updatefreq(\$feeds[\$id], \$refresh)") !== false, 'apply.php writes it for each feed');
 
+/*
+ * The install's and the update's step (blocklists_write_frequency(), which fetch-frequency.php runs):
+ * the updatefreq of the plugin's own URL table aliases switched on, and nothing else. Stand-ins for the
+ * alias model (its items, its validation), the log and the save.
+ */
+class FreqItems
+{
+    public $items;
+
+    public function iterateItems()
+    {
+        foreach ($this->items as $i => $item) {
+            yield 'uuid-' . $i => $item;
+        }
+    }
+}
+
+class FreqMessage
+{
+    public function getField()
+    {
+        return 'aliases.alias.uuid-0.updatefreq';
+    }
+
+    public function getMessage()
+    {
+        return 'refused';
+    }
+}
+
+class FreqModel
+{
+    public $aliases;
+    public $refuse = false;
+
+    public function __construct($aliases)
+    {
+        $this->aliases = (object)['alias' => new FreqItems()];
+        $this->aliases->alias->items = array_map(function ($a) {
+            return (object)$a;
+        }, $aliases);
+    }
+
+    public function performValidation()
+    {
+        return $this->refuse ? [new FreqMessage()] : [];
+    }
+
+    public function state()
+    {
+        return array_map(function ($a) {
+            return (array)$a;
+        }, $this->aliases->alias->items);
+    }
+}
+
+function frequency($model, $feeds, $refresh)
+{
+    $said = [];
+    $saves = 0;
+    $n = blocklists_write_frequency($model, $feeds, $refresh, function ($line) use (&$said) {
+        $said[] = $line;
+    }, function () use (&$saves) {
+        $saves++;
+    });
+    return [$n, $said, $saves];
+}
+
+$alias = function ($name, $enabled, $type, $updatefreq) {
+    return ['name' => $name, 'enabled' => $enabled, 'type' => $type, 'updatefreq' => $updatefreq,
+        'content' => 'https://example.com/' . $name, 'description' => 'd ' . $name, 'counters' => '0', 'proto' => 'IPv4'];
+};
+$given = [
+    $alias('blocklists_feodo', '1', 'urltable', '1'),                   /* the daily fetch of before: changed */
+    $alias('blocklists_spamhaus_drop', '1', 'urltable', '1'),           /* already a day: kept */
+    $alias('blocklists_cins_army', '1', 'urltable', ''),                /* none at all: a day */
+    $alias('blocklists_blocklist_de', '0', 'urltable', '1'),            /* switched off: left */
+    $alias('blocklists_countries', '1', 'geoip', ''),                   /* the GeoIP alias: left */
+    $alias('blocklists_mine', '1', 'urltable', '1'),                    /* the owner's, not a feed: left */
+    $alias('mine', '1', 'urltable', '1'),                               /* the owner's: left */
+    $alias('blocklists_et_compromised', '1', 'network', '1'),           /* made another type by hand: left */
+];
+$model = new FreqModel($given);
+$before = $model->state();
+[$n, $said, $saves] = frequency($model, $feeds, 'h2');
+$after = $model->state();
+check($n === 2 && $saves === 1, "the step: 2 aliases changed and saved once ($n, $saves)");
+check($after[0]['updatefreq'] === '0.083333' && $after[2]['updatefreq'] === '1',
+    'the step: feodo every 2 hours, CINS Army (none before) once a day');
+$others = $before;
+$others[0]['updatefreq'] = '0.083333';
+$others[2]['updatefreq'] = '1';
+check($after === $others, 'the step: nothing else of any alias changed - none added, removed, switched on or off, '
+    . 'no URL, description, counters or type; switched off, GeoIP, the owner\'s and another type left');
+check(count($said) === 3 && strpos($said[0], 'blocklists_feodo: fetched every 2 hours now (updatefreq 0.083333, was 1)') === 0
+    && strpos($said[1], 'blocklists_cins_army: fetched every 24 hours now (updatefreq 1, was empty)') === 0
+    && strpos($said[2], 'fetch frequency written into 2 of the 3 aliases') === 0, 'the step: each change said, then the outcome: '
+    . implode(' | ', $said));
+
+[$n, $said, $saves] = frequency($model, $feeds, 'h2');
+check($n === 0 && $saves === 0 && count($said) === 1 && strpos($said[0], 'already as the settings say') !== false,
+    'the step again: nothing to change, nothing saved, said: ' . implode(' | ', $said));
+[$n, $said, $saves] = frequency($model, $feeds, 'h24');
+check($n === 1 && $saves === 1 && $model->state()[0]['updatefreq'] === '1', 'Once a day chosen: feodo once a day');
+
+$model = new FreqModel($given);
+$model->refuse = true;
+[$n, $said, $saves] = frequency($model, $feeds, 'h2');
+check($n === 0 && $saves === 0 && count($said) === 1 && strpos($said[0], 'refused it: aliases.alias.uuid-0.updatefreq: refused') !== false,
+    'the model refuses: nothing saved, the refusal said: ' . implode(' | ', $said));
+$model = new FreqModel($given);
+[$n, $said, $saves] = frequency($model, null, 'h2');
+check($n === 0 && $saves === 0 && $model->state() === $before && strpos($said[0] ?? '', 'feeds.json could not be read') !== false,
+    'no feeds.json: nothing touched, nothing saved, said');
+[$n, $said, $saves] = frequency(new FreqModel([$alias('mine', '1', 'urltable', '1'), $alias('blocklists_feodo', '0', 'urltable', '1')]), $feeds, 'h2');
+check($n === 0 && $saves === 0 && strpos($said[0] ?? '', 'no alias of the plugin\'s lists is switched on') !== false,
+    'none of its aliases switched on (a fresh install): nothing saved, said');
+
+/* both installers run the step, its output kept, before their filter reload - and the whole Apply no more */
+$script = $root . '/src/opnsense/scripts/blocklists/fetch-frequency.php';
+$text = file_get_contents($script);
+check(strpos($text, "#!/usr/local/bin/php\n") === 0, 'fetch-frequency.php is run as a script (#!, made 0755 by the package)');
+check(strpos($text, 'blocklists_write_frequency(') !== false && strpos($text, "openlog('blocklists'") !== false
+    && strpos($text, 'syslog(LOG_NOTICE') !== false && strpos($text, 'echo ') !== false, 'fetch-frequency.php: the step, '
+    . 'its lines to the system log under blocklists and to the installer');
+check(preg_match('/^exit\(0\);\s*$/m', $text) === 1 && strpos($text, 'catch (\Throwable') !== false,
+    'fetch-frequency.php: never stops an install');
+foreach (['pkg/post-install.sh', 'install/install.sh'] as $installer) {
+    $lines = explode("\n", file_get_contents($root . '/' . $installer));
+    $run = $reload = null;
+    foreach ($lines as $i => $line) {
+        if (preg_match('/^\s*#/', $line)) {
+            continue;
+        }
+        if ($run === null && strpos($line, '/usr/local/opnsense/scripts/blocklists/fetch-frequency.php') !== false
+            && strpos($line, 'chmod') === false && strpos($line, '[ -x') === false) {
+            $run = $i;
+        }
+        if ($reload === null && preg_match('/configctl filter reload/', $line)) {
+            $reload = $i;
+        }
+        check(!preg_match('#blocklists/apply\.php(\s|$)#', $line) || strpos($line, 'chmod') !== false,
+            "$installer: no full Apply (line " . ($i + 1) . ')');
+    }
+    check($run !== null, "$installer runs fetch-frequency.php");
+    check($run !== null && strpos($lines[$run], '/dev/null') === false, "$installer: its output not thrown away");
+    check($run !== null && $reload !== null && $run < $reload, "$installer: before the filter reload");
+}
+$install = file_get_contents($root . '/install/install.sh');
+check(preg_match('#chmod 755[^\n]*(\\\\\n[^\n]*)*fetch-frequency\.php#', $install) === 1, 'install.sh makes it 0755');
+
+/*
+ * fetch-frequency.php itself, run as the installers run it, with OPNsense's classes stood in for by a
+ * script/load_phalcon.php of this test's own on the include path: the settings' choice read from the
+ * plugin's model, the step on the alias model, the save through the model and Config, its lines printed.
+ */
+$stub = sys_get_temp_dir() . '/blocklists-frequency-' . getmypid();
+@mkdir($stub . '/script', 0700, true);
+file_put_contents($stub . '/script/load_phalcon.php', <<<'STUB'
+<?php
+namespace OPNsense\Core {
+    class Config
+    {
+        private static $me;
+
+        public static function getInstance()
+        {
+            return self::$me ??= new Config();
+        }
+
+        public function save()
+        {
+            echo "STUB saved\n";
+        }
+    }
+}
+
+namespace OPNsense\BlockLists {
+    class BlockLists
+    {
+        public $general;
+
+        public function __construct()
+        {
+            $this->general = (object)['refresh' => getenv('BLOCKLISTS_TEST_REFRESH')];
+        }
+    }
+}
+
+namespace OPNsense\Firewall {
+    class StubItems
+    {
+        public $items = [];
+
+        public function iterateItems()
+        {
+            foreach ($this->items as $i => $item) {
+                yield 'uuid-' . $i => $item;
+            }
+        }
+    }
+
+    class Alias
+    {
+        public $aliases;
+
+        public function __construct()
+        {
+            if (getenv('BLOCKLISTS_TEST_FAIL')) {
+                throw new \RuntimeException('the model could not be read');
+            }
+            $this->aliases = (object)['alias' => new StubItems()];
+            foreach (json_decode(getenv('BLOCKLISTS_TEST_ALIASES'), true) as $alias) {
+                $this->aliases->alias->items[] = (object)$alias;
+            }
+        }
+
+        public function performValidation()
+        {
+            return [];
+        }
+
+        public function serializeToConfig()
+        {
+            echo 'STUB serialized ' . json_encode(array_map(function ($a) {
+                return (array)$a;
+            }, $this->aliases->alias->items)) . "\n";
+        }
+    }
+}
+STUB);
+function run_script($script, $stub, $aliases, $refresh, $fail = false)
+{
+    putenv('BLOCKLISTS_TEST_ALIASES=' . json_encode($aliases));
+    putenv('BLOCKLISTS_TEST_REFRESH=' . $refresh);
+    putenv('BLOCKLISTS_TEST_FAIL=' . ($fail ? '1' : ''));
+    $out = [];
+    exec(escapeshellarg(PHP_BINARY) . ' -d include_path=' . escapeshellarg($stub) . ' ' . escapeshellarg($script) . ' 2>&1', $out, $rc);
+    return [$rc, $out];
+}
+[$rc, $out] = run_script($script, $stub, $given, 'h2');
+$saved = array_values(array_filter($out, function ($l) {
+    return strpos($l, 'STUB serialized ') === 0;
+}));
+$written = json_decode(substr($saved[0] ?? '', strlen('STUB serialized ')), true);
+check($rc === 0 && in_array('Block Lists: blocklists_feodo: fetched every 2 hours now (updatefreq 0.083333, was 1)', $out, true)
+    && in_array('STUB saved', $out, true), 'fetch-frequency.php run: feodo changed, saved through the model and Config, '
+    . 'said: ' . implode(' | ', $out));
+check(is_array($written) && $written === $others, 'fetch-frequency.php run: what it saved is the old aliases with feodo\'s '
+    . 'and CINS Army\'s updatefreq only');
+[$rc, $out] = run_script($script, $stub, $given, 'h24');
+check($rc === 0 && in_array('Block Lists: blocklists_spamhaus_drop: fetched every 24 hours now (updatefreq 1, was 1)', $out, true) === false
+    && in_array('Block Lists: blocklists_cins_army: fetched every 24 hours now (updatefreq 1, was empty)', $out, true)
+    && !in_array('Block Lists: blocklists_feodo: fetched every 24 hours now (updatefreq 1, was 1)', $out, true),
+    'fetch-frequency.php run, Once a day: the setting read from the plugin\'s model - only CINS Army changes');
+[$rc, $out] = run_script($script, $stub, $given, 'h2', true);
+check($rc === 0 && count($out) === 1 && $out[0] === 'Block Lists: fetch frequency not written: the model could not be read',
+    'fetch-frequency.php run, the model failing: said, exit 0: ' . implode(' | ', $out));
+@unlink($stub . '/script/load_phalcon.php');
+@rmdir($stub . '/script');
+@rmdir($stub);
+
 echo ($failed ? "$failed of $checks checks failed\n" : "$checks checks passed\n");
 exit($failed ? 1 : 0);

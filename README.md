@@ -61,9 +61,15 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
   A list is fetched at once, whatever its floor, when its alias is made again: the list chosen
   again, or the plugin or the alias switched off and on. Until 2026-11-16 every list was fetched
   once a day; an alias made before takes the new frequency at the plugin's next Apply, which writes
-  it into every alias it owns - and the update that brings this runs Apply itself where the
-  plugin's aliases are there (`pkg/post-install.sh`), rewriting them in place, so none is fetched
-  for it;
+  it into every alias it owns, and at every install or update of the plugin - by a package, XGS:
+  Updates, the self-update or `install/install.sh` by hand: both installers run
+  `fetch-frequency.php`, which sets the `updatefreq` of each alias of the plugin's own lists that is
+  switched on and a URL table, where it is not what the settings say, and changes nothing else - no
+  alias added, removed, switched on or off, nothing else of one rewritten; the countries' alias, one
+  switched off and the owner's own are left as they are. config.xml is saved only when one changed,
+  and what it did is in the system log (`blocklists`) and the installer's output (until 2026-11-17 a
+  package ran the whole Apply instead, its output thrown away, and an update from XGS: Updates ran
+  nothing);
 - **countries** - one GeoIP alias, `blocklists_countries` (it needs a GeoIP source in Firewall:
   Aliases);
 - **the block rules** - registered by the plugin at every filter reload (`plugins.inc.d/blocklists.inc`,
@@ -271,7 +277,8 @@ general logging off: the inside rule first among the plugin's and logged; a conn
 136's own address, not the WAN's; os-netreport's alert and its infected.json entry from it. That day
 Feodo Tracker held one address (phase 0's reading), so the rule rarely fires. The rule was floating
 then; on the inside interfaces only (none a gateway is on, none on DHCP or the like, none virtual),
-and the hardware drop's Inbound only and deadline, are to be run on a firewall before this is merged.
+the hardware drop's Inbound only and deadline, and the fetch frequency written at an install or
+update (`fetch-frequency.php`), are to be run on a firewall before this is merged.
 
 Its table drives os-netreport's alert and os-portguard's isolation: OPNsense fetches an alias's URL
 without checking the server's certificate unless "Check certificate of aliases URLs" is on
@@ -296,7 +303,8 @@ the PHP and the rules hook with `php -l` and the Python with `py_compile`,~~ che
 rules hook with `php -l` and the Python with `py_compile` before anything is copied (since
 2026-10-29: checked after the copy, a hook with an error stayed where every filter reload includes
 it), then copies `src/` onto `/usr/local` (the rules hook and the cron entry for the cuts with it),
-puts the page in the menu (`place-menu.sh`: XGS with os-xgs-npu, Firewall without) and records the
+puts the page in the menu (`place-menu.sh`: XGS with os-xgs-npu, Firewall without), writes the
+fetch frequency into the plugin's aliases already there (`fetch-frequency.php`, above) and records the
 commit for the self-update. Safe to run again: the settings in config.xml are kept. Nothing is
 blocked until lists are chosen on the page and applied. `sh install/uninstall.sh` removes the plugin
 and its rules; the `blocklists_*` aliases stay in Firewall: Aliases, blocking nothing, and OPNsense

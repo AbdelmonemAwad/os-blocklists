@@ -11,9 +11,11 @@
  * alone (2026-10-29; every blocklists_* alias was taken for the plugin's before). An alias whose feed
  * is no longer chosen is removed - or, when something else in config.xml still names it or holds its
  * uuid, left in place switched off, so no rule or setting of the owner's is left pointing at nothing.
- * Each feed's alias is fetched again as often as "Fetch the lists" says, never more often than its
- * publisher allows (updatefreq.php); an alias made before is given the frequency here too, so the
- * next Apply after an update changes it (until 2026-11-16 every alias was fetched once a day).
+ * Each feed's alias is given the fetch frequency "Fetch the lists" says, or the floor feeds.json keeps
+ * for its list (min_hours) where that is longer - a floor of this plugin's, not always its publisher's
+ * (updatefreq.php). An alias made before is given it here too, and at every install and update by
+ * fetch-frequency.php, which changes nothing else of the aliases (until 2026-11-16 every alias was
+ * fetched once a day).
  * The block rules are not written here: plugins.inc.d/blocklists.inc registers them from these
  * aliases at every filter reload, so they are never among the owner's own rules.
  *
