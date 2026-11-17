@@ -77,17 +77,23 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
   association) that no gateway names (none in System: Gateways, switched off or not, IPv4 or IPv6,
   and none chosen in the interface's own gateway rules), that take no address from outside (DHCP,
   PPPoE, PPTP, L2TP, PPP, DHCPv6, SLAAC, 6rd, 6to4, PPPoEv6, lease or not) and are not virtual (the
-  loopback, a VPN or interface group; one left out is under [Not yet, and why](#not-yet-and-why)),
-  never the WAN, so that nothing coming in to an address of the firewall itself is blocked by it
-  ahead of the anti-lockout rule - described
-  `Block Lists: blocklists_<id> from inside`, logged whatever "Log blocked packets" says, and before
-  the list's other rules (all are priority 1, and OPNsense 26.7 writes one priority's rules in the
-  order they were registered). Why: the outbound rule matches where a packet leaves the firewall,
-  after outbound NAT, so behind NAT its log line names the firewall's WAN address, never the device
-  (seen on an XGS 3300, 2026-11-16); this one matches where the packet comes in from the LAN, before
-  NAT, and its line carries the device's own address - os-netreport's command-and-control alert reads
-  it by that description. It writes one line to the filter log for every packet it blocks, about 220
-  bytes (270 for TCP), and keeps no state, so an infected device that retries all day grows the log
+  loopback, a VPN or interface group; one left out is under [Not yet, and why](#not-yet-and-why)) -
+  described `Block Lists: blocklists_<id> from inside`, logged whatever "Log blocked packets" says,
+  and before the list's other rules (all are priority 1, and OPNsense 26.7 writes one priority's
+  rules in the order they were registered). It is never on a WAN, so nothing that comes in from the
+  internet is blocked or logged by it. On an inside interface it comes before every other rule, the
+  anti-lockout rule too (priority 5: the GUI, and SSH where it is on, passed to the firewall from the
+  LAN): should the firewall's own public address be on the list - an address that served a command
+  server once and was handed on - a device inside that reaches that address, the GUI opened by the
+  firewall's public name or a port forward through NAT reflection, is blocked and logged as from
+  inside as well; the GUI is still reached by the firewall's inside address. pf has no one rule for
+  "to the list but not to this firewall", so that case is left as it is. Why the rule: the outbound
+  rule matches where a packet leaves the firewall, after outbound NAT, so behind NAT its log line
+  names the firewall's WAN address, never the device (seen on an XGS 3300, 2026-11-16); this one
+  matches where the packet comes in from the LAN, before NAT, and its line carries the device's own
+  address - os-netreport's command-and-control alert reads it by that description. It writes one
+  line to the filter log for every packet it blocks, about 220 bytes (270 for TCP), and keeps no
+  state, so an infected device that retries all day grows the log
   by that much each try: at one try a second about 23 MB a day, kept 31 days by OPNsense's default;
 - **open connections cut** - a block rule stops new connections only; with "Cut open connections"
   on, a connection already open to or from an address a list has just gained is cut within a
