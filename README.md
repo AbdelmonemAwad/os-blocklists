@@ -136,8 +136,16 @@ block outbound too (Both ways): under Inbound only the rules let such a connecti
 stay dead on the coprocessor - its pf state is killed as before, and the connection made again goes
 through. A connection dropped there is not handed back when its address leaves a list, the list is
 unchosen or the plugin turned off: it ends when its sender stops, or is handed back on XGS:
-Offloaded Flows. The hardware step has 5 seconds; past them it is left, said in the system log, and
-the pf cut goes on without it. The module is loaded from os-xgs-npu's place, not copied, and only
+Offloaded Flows. The hardware step has 5 seconds, and they are a hard limit (since 2026-11-17): it
+runs in a thread of its own, and at 5 seconds the pf cut goes on whatever the step is doing. The step
+is told to stop and ends at the next connection it looks at, writing no verdict after that - or, if
+a call into the driver never returns, with the process. How many it dropped is then not known, and
+the summary, the message and the system log say "unknown". The flow-table lock it may hold goes
+with the process; the page place it shares with os-xgs-npu's other readers is put back by the step
+as it ends, or, if the process ends first, stays until the next reading puts it back. While a step
+left at its deadline still runs, no second one is started beside it (`ja4_cut.py` reads every two
+seconds). Before, a real-time timer stopped the step, and the pf cut could wait well past the 5
+seconds for a driver call to end. The module is loaded from os-xgs-npu's place, not copied, and only
 when there is something to cut; the count is in the summary, the page's "Open connections" line (for
 `ja4_cut.py`, the JA4 tab's "Last run" line) and the system log (`N connections dropped in
 hardware`). Without os-xgs-npu nothing changes.
