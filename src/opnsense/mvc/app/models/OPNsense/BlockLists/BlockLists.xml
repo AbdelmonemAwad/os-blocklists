@@ -34,10 +34,11 @@
                 The owner's abuse.ch Auth-Key, for ThreatFox (2026-11-17): scripts/blocklists/threatfox.py
                 sends it to abuse.ch in the address of each export, as abuse.ch asks. An UpdateOnlyTextField,
                 OPNsense's write-only field: the settings' answer to the page has it empty, and an empty
-                value from the form keeps the key saved. PHP reads it with getValue() - (string) of such a
-                field is always "". Only the characters an address carries as they are (RFC 3986's
-                unreserved), and nothing after them (D: not a newline either), so it can never change the
-                path it is put in; threatfox.py checks the same.
+                value from the form keeps the key saved; the Settings tab's Remove the key takes it out
+                (Api/SettingsController.php, forgetKeyAction()). PHP reads it with getValue() - (string)
+                of such a field is always "". Only the characters an address carries as they are (RFC
+                3986's unreserved), and nothing after them (D: not a newline either), so it can never
+                change the path it is put in; threatfox.py checks the same.
             -->
             <threatfox_key type="UpdateOnlyTextField">
                 <Required>N</Required>
