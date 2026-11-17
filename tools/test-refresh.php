@@ -174,9 +174,9 @@ $given = [
     $alias('blocklists_cins_army', '1', 'urltable', ''),                /* none at all: a day */
     $alias('blocklists_blocklist_de', '0', 'urltable', '1'),            /* switched off: left */
     $alias('blocklists_countries', '1', 'geoip', ''),                   /* the GeoIP alias: left */
-    $alias('blocklists_mine', '1', 'urltable', '1'),                    /* the owner's, not a feed: left */
-    $alias('mine', '1', 'urltable', '1'),                               /* the owner's: left */
-    $alias('blocklists_et_compromised', '1', 'network', '1'),           /* made another type by hand: left */
+    $alias('blocklists_mine', '1', 'urltable', '0.5'),                  /* the owner's, not a feed: left */
+    $alias('mine', '1', 'urltable', '0.5'),                             /* the owner's: left */
+    $alias('blocklists_et_compromised', '1', 'network', '0.5'),         /* made another type by hand: left */
 ];
 $model = new FreqModel($given);
 $before = $model->state();

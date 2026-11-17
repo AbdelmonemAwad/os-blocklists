@@ -181,6 +181,12 @@ namespace {
             'opt20' => [$m('ovpns1', null, null), [], false, 'an OpenVPN server assigned, no address'],
             'opt21' => [$m('igb19', 'none', null), [], false, 'ipaddr "none"'],
             'opt22' => [$m('pppoe0', 'pppoe', null), [], false, 'a WAN on PPPoE, its link down'],
+            'opt23' => [$m('igb20', null, '2001:db8:23::2'), ['gatewayv6' => 'OLD_GW6'], false,
+                'IPv6-only, static, its IPv6 gateway rules naming a gateway no longer there'],
+            'opt24' => [$m('igb21', '10.0.0.97', 'slaac'), [], false,
+                'static IPv4 and SLAAC, its automatic IPv6 gateway missing (its name taken by another)'],
+            'opt25' => [$m('igb22', '203.0.113.50', null), [], false,
+                'a WAN, static, IPv4 gateway rules Disabled, its only gateway switched off'],
             'lo0' => [$m('lo0', '127.0.0.1', '::1', null, null, ['virtual' => '1']), [], false,
                 'the loopback (loopback.inc registers it, 127.0.0.1)'],
             'openvpn' => [$m('openvpn', null, null, null, null, ['virtual' => '1', 'type' => 'group']), [], false, 'the OpenVPN group'],
@@ -209,6 +215,8 @@ namespace {
             ['name' => 'OPT9_DHCP', 'interface' => 'opt9', 'ipprotocol' => 'inet', 'dynamic' => true, 'defunct' => true],
             ['name' => 'WAN11_GW6', 'interface' => 'opt11', 'ipprotocol' => 'inet6', 'gateway' => '2001:db8:11::1', 'disabled' => '1'],
             ['name' => 'LAN_ROUTER', 'interface' => 'opt16', 'ipprotocol' => 'inet', 'gateway' => '10.0.0.34'],
+            ['name' => 'OPT24_SLAAC', 'interface' => 'opt2', 'ipprotocol' => 'inet6', 'gateway' => '2001:db8:2::2'],
+            ['name' => 'WAN7_GW', 'interface' => 'opt25', 'ipprotocol' => 'inet', 'gateway' => '203.0.113.49', 'disabled' => '1'],
         ];
     }
 
