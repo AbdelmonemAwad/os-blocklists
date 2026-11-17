@@ -15,6 +15,22 @@ namespace OPNsense\Firewall {
     class Plugin
     {
         public $rules = [];
+        /* the filter's interface mapping (filter.lib.inc): a LAN, a WAN with its gateway, a WAN on DHCP
+           whose lease is not there yet, a transit with a gateway, an IPv6-only LAN tracking the WAN */
+        public $mapping = [
+            'lan' => ['if' => 'igb1', 'ipaddr' => '192.168.1.1', 'gateway' => null, 'gatewayv6' => null],
+            'wan' => ['if' => 'igb0', 'ipaddr' => 'dhcp', 'gateway' => '203.0.113.1', 'gatewayv6' => null],
+            'opt1' => ['if' => 'igb2', 'ipaddr' => 'dhcp', 'gateway' => null, 'gatewayv6' => null],
+            'opt2' => ['if' => 'igb3', 'ipaddr' => '10.0.0.2', 'gateway' => '10.0.0.1', 'gatewayv6' => null],
+            'opt3' => ['if' => 'igb4', 'ipaddr' => '', 'ipaddrv6' => 'track6', 'gateway' => null, 'gatewayv6' => null],
+        ];
+
+        public function getInterfaceMapping()
+        {
+            foreach ($this->mapping as $key => $intf) {
+                yield $key => $intf;
+            }
+        }
 
         public function registerFilterRule($prio, $conf)
         {
@@ -85,14 +101,28 @@ namespace {
         'mixed_c2' => ['proto' => '', 'c2' => true],
         'not_c2' => ['proto' => 'IPv4', 'c2' => 'yes'],
     ]));
+    /* OPNsense's util.inc, which the filter has loaded when it runs the hook */
+    function is_ipaddrv4($a)
+    {
+        return filter_var($a, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false;
+    }
+
+    function is_ipaddrv6($a)
+    {
+        return filter_var($a, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false;
+    }
+
     require $root . '/src/etc/inc/plugins.inc.d/blocklists.inc';
 
-    function rules($general, $aliases)
+    function rules($general, $aliases, $mapping = null)
     {
         global $config;
         $config = ['OPNsense' => ['BlockLists' => ['general' => $general]]];
         \OPNsense\Firewall\Alias::$given = $aliases;
         $fw = new \OPNsense\Firewall\Plugin();
+        if ($mapping !== null) {
+            $fw->mapping = $mapping;
+        }
         blocklists_firewall($fw);
         return $fw->ordered();
     }
@@ -118,7 +148,13 @@ namespace {
     $r = $inside[0] ?? [];
     check(($r['to'] ?? '') === '<blocklists_feodo>' && !isset($r['from']), 'from any to <blocklists_feodo>');
     check(($r['direction'] ?? '') === 'in', 'direction in');
-    check(!isset($r['interface']), 'no interface: floating');
+    check(($r['interface'] ?? '') === 'lan,opt3', 'on the inside interfaces only - a static address and no gateway: '
+        . 'not the WAN, not a DHCP one without its lease yet, not a transit with a gateway; an IPv6-only LAN tracking '
+        . 'the WAN in');
+    $none = described(rules(['enabled' => '1', 'direction' => 'both', 'log' => '0'], $aliases,
+        ['wan' => ['if' => 'igb0', 'ipaddr' => 'dhcp', 'gateway' => '203.0.113.1', 'gatewayv6' => null]]),
+        'Block Lists: blocklists_feodo from inside');
+    check(count($none) === 0, 'no inside interface at all: no "from inside" rule, never a floating one');
     check(($r['type'] ?? '') === 'block' && ($r['quick'] ?? false) === true, 'block, quick');
     check(($r['log'] ?? false) === true, 'logged with the log setting off');
     check(!isset($r['label']), 'no label of its own: OPNsense hashes it, and rules.debug carries the description');

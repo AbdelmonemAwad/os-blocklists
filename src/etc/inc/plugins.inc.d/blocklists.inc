@@ -32,6 +32,31 @@
 use OPNsense\Firewall\Alias;
 use OPNsense\Firewall\Plugin;
 
+/*
+ * The inside interfaces, as a rule's interface list: those of the firewall's own networks, where a
+ * device's packet enters before outbound NAT - an address of their own (a static IPv4 address, or IPv6
+ * static or tracked) and no gateway, IPv4 or IPv6, in the filter's interface mapping (filter.lib.inc
+ * gives a WAN its gateway; one taking its address from DHCP or PPPoE has no static address, its lease
+ * there or not). Until 2026-11-17 the rule had no interface: it blocked what came in on the WAN to an
+ * address of the firewall itself on a list, ahead of the anti-lockout rule, and logged the internet's
+ * senders as "from inside".
+ */
+function blocklists_inside(Plugin $fw)
+{
+    $inside = [];
+    foreach ($fw->getInterfaceMapping() as $key => $intf) {
+        if (!empty($intf['gateway']) || !empty($intf['gatewayv6'])) {
+            continue;
+        }
+        $v4 = (string)($intf['ipaddr'] ?? '');
+        $v6 = (string)($intf['ipaddrv6'] ?? '');
+        if (is_ipaddrv4($v4) || $v6 === 'track6' || is_ipaddrv6($v6)) {
+            $inside[] = $key;
+        }
+    }
+    return $inside;
+}
+
 function blocklists_firewall(Plugin $fw)
 {
     global $config;
@@ -42,6 +67,7 @@ function blocklists_firewall(Plugin $fw)
     }
     $both = ($general['direction'] ?? 'both') === 'both';
     $log = ($general['log'] ?? '0') === '1';
+    $inside = $both ? implode(',', blocklists_inside($fw)) : '';
 
     /*
      * Only the names this plugin makes are its own - the set apply.php, cut.py and status.py use too.
@@ -77,10 +103,11 @@ function blocklists_firewall(Plugin $fw)
             $families[] = 'inet6';
         }
         foreach ($families as $family) {
-            if ($both && isset($c2[$name])) {
+            if ($both && isset($c2[$name]) && $inside !== '') {
                 $fw->registerFilterRule(1, [
                     'ipprotocol' => $family,
                     'descr' => 'Block Lists: ' . $name . ' from inside',
+                    'interface' => $inside,
                     'to' => '<' . $name . '>',
                     'direction' => 'in',
                     'type' => 'block',
