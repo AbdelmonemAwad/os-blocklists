@@ -50,14 +50,20 @@ jobs:
       - name: The rules hook registers what it should
         run: php tools/test-rules.php
 
-      # How often each feed is fetched: the page's choice or its publisher's minimum, the longer.
-      - name: Each list fetched no more often than its publisher allows
+      # How often each feed is fetched: the page's choice or the floor feeds.json keeps for it, the
+      # longer; and the install's and update's step, which writes that into the aliases and nothing else.
+      - name: Each list fetched as often as chosen, never under its floor
         run: php tools/test-refresh.php
 
       # cut.py and ja4_cut.py with a stand-in for os-xgs-npu's hwdrop.py: called once, before the
-      # pf states are killed, and nothing changed without it.
+      # pf states are killed, and nothing changed without it; its deadline a hard one.
       - name: The cuts drop in hardware where os-xgs-npu is
         run: python3 tools/test-hwdrop.py
+
+      # status.py's "inside" for each list, read from the rules pf was given, and the Lists tab's
+      # note on "Blocked in", shown only where a "from inside" rule is.
+      - name: The page says what the rules count
+        run: python3 tools/test-status.py
 
   syntax:
     name: syntax

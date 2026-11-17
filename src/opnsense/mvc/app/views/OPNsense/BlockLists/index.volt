@@ -101,6 +101,9 @@
 
             $('#bl-project').toggle(!!data.project.installed);
             $('#bl-lists-none').toggle(!data.lists.length);
+            /* only where a "from inside" rule was given to pf: a command-and-control list, outbound
+               blocked, an interface that counts as inside */
+            $('#bl-inside-note').toggle(data.lists.some(function (l) { return l.inside; }));
             $('#bl-dns-none').toggle(!data.dns.lists.length);
 
             const cut = data.cut.last || {};
@@ -261,8 +264,8 @@
         <div id="bl-lists-none" class="text-muted" style="display: none; padding: 0 15px 10px;">
             {{ lang._('No list is chosen. Choose lists and countries in Settings, then Apply.') }}
         </div>
-        <div class="text-muted" style="padding: 0 15px 10px;">
-            {{ lang._('For a command-and-control list, Blocked in counts the devices inside too: they are blocked where they enter the firewall.') }}
+        <div id="bl-inside-note" class="text-muted" style="display: none; padding: 0 15px 10px;">
+            {{ lang._('For a command-and-control list, Blocked in also counts the packets of devices inside that tried to reach it: they are blocked where they enter the firewall.') }}
         </div>
         <div style="padding: 0 15px 15px;">
             {{ lang._('Open connections') }}: <span id="bl-cut">-</span>

@@ -26,7 +26,11 @@ import ja4_cut                                                           # noqa:
 
 CONFIG = '/conf/config.xml'
 PFCTL = '/sbin/pfctl'
+RULES = '/tmp/rules.debug'          # the rules the last filter reload gave pf (filter.inc)
 PREFIX = 'blocklists_'
+# a "from inside" rule's line there, as OPNsense writes it: `block in log quick on igb1 inet from {any}
+# to {<blocklists_feodo>} label "..." # Block Lists: blocklists_feodo from inside`
+INSIDE = re.compile(r'# Block Lists: (' + PREFIX + r'\S+) from inside\s*$')
 FEEDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'feeds.json')
 CUT_STATUS = '/var/db/os-blocklists/cut/status.json'
 JA4_STATUS = '/var/db/os-blocklists/ja4/status.json'
@@ -66,6 +70,26 @@ def tables():
     return out
 
 
+def inside_rules(path=None):
+    """The lists whose "from inside" rule pf was given at the last filter reload, by its description,
+    as os-netreport reads it: the rules hook registers one only for a command-and-control list while
+    outbound is blocked, and only where an interface counts as inside (plugins.inc.d/blocklists.inc).
+    A line written commented out - a rule OPNsense could not place - is not one. Empty when the file
+    cannot be read."""
+    names = set()
+    try:
+        with open(path or RULES, encoding='utf-8', errors='replace') as handle:
+            for line in handle:
+                if line.lstrip().startswith('#'):
+                    continue
+                found = INSIDE.search(line)
+                if found:
+                    names.add(found.group(1))
+    except OSError:
+        pass
+    return names
+
+
 def main():
     try:
         root = ET.parse(CONFIG).getroot()
@@ -79,6 +103,7 @@ def main():
     # the aliases this plugin makes, as cut.py, apply.php and the rules hook count them: one of the
     # owner's by another blocklists_ name is not shown as one of its lists
     mine = cut.owned(FEEDS)
+    inside = inside_rules()
     lists = []
     for alias in root.findall('OPNsense/Firewall/Alias/aliases/alias'):
         name = alias.findtext('name') or ''
@@ -95,6 +120,8 @@ def main():
             'what': feed.get('what', ''), 'terms': feed.get('terms', ''),
             'loaded': name in pf, 'entries': counters.get('entries'),
             'in_blocked': counters.get('in_blocked'), 'out_blocked': counters.get('out_blocked'),
+            # its "Blocked in" counts the packets of devices inside too: they are blocked coming in
+            'inside': name in inside,
         })
 
     unbound = root.find('OPNsense/unboundplus')

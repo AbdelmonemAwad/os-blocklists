@@ -15,7 +15,7 @@
  "Entries",
  "Family",
  "Fingerprint",
- "For a command-and-control list, Blocked in counts the devices inside too: they are blocked where they enter the firewall.",
+ "For a command-and-control list, Blocked in also counts the packets of devices inside that tried to reach it: they are blocked where they enter the firewall.",
  "ID",
  "JA4",
  "Last connection",

@@ -37,7 +37,7 @@
         <id>blocklists.general.log</id>
         <label>Log blocked packets</label>
         <type>checkbox</type>
-        <help>Write every packet the rules block to the firewall log. A long list blocks a lot. With Both ways, a device inside trying to reach a command-and-control list (Feodo Tracker) is logged whatever this says, by its own address, so it can be found.</help>
+        <help>Write every packet the rules block to the firewall log. A long list blocks a lot. With Both ways, a device trying to reach a command-and-control list (Feodo Tracker) is logged whatever this says, by its own address, so it can be found - where it comes in on an inside interface: one with an address of its own, not taken by DHCP, PPPoE or the like, and no gateway on it. Elsewhere (a VPN group, or a LAN with a router behind it set as a gateway) it is blocked all the same, and logged only as this says.</help>
     </field>
     <field>
         <id>blocklists.general.cut</id>

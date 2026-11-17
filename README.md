@@ -104,7 +104,8 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
 - **open connections cut** - a block rule stops new connections only; with "Cut open connections"
   on, a connection already open to or from an address a list has just gained is cut within a
   minute (`cut.py`), and on a Sophos XGS taken out of the coprocessor with its state - or, where
-  os-xgs-npu is installed with its "Cut in hardware" on, dropped on the coprocessor first (below);
+  os-xgs-npu is installed with its "Cut in hardware" on and the lists block outbound too (Both
+  ways), dropped on the coprocessor first (below);
 - **JA4** - TLS connections whose client shows a listed fingerprint are cut, read from the
   Intrusion Detection's TLS log every two seconds (`ja4_cut.py`); the page lists the fingerprints
   seen, to find the one to list (those in the log's last 64 MB, since 2026-10-29);
@@ -188,8 +189,9 @@ hardware`). Without os-xgs-npu nothing changes.
   ([Installation](#installation)).
 - **no list is dropped in an XGS's hardware** - the coprocessor holds no address list of its own to
   block by (os-xgs-npu's hardware-drop research, issue 519); a cut connection is taken out of the
-  coprocessor with its state, and with os-xgs-npu's "Cut in hardware" on it is dropped there first
-  ([Beside os-xgs-npu](#beside-os-xgs-npu)) - a connection, not the list.
+  coprocessor with its state, and with os-xgs-npu's "Cut in hardware" on and outbound blocked too
+  (Both ways) it is dropped there first ([Beside os-xgs-npu](#beside-os-xgs-npu)) - a connection,
+  not the list.
 
 ## What is tested
 
