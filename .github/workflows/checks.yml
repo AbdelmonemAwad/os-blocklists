@@ -65,6 +65,17 @@ jobs:
       - name: The page says what the rules count
         run: python3 tools/test-status.py
 
+      # ThreatFox's command-and-control list, fetched with the owner's abuse.ch Auth-Key: a recorded
+      # sample of its export read, abuse.ch's pace kept, the last good list kept on a failure, pf's
+      # table filled - and the key sent to abuse.ch only, never in an answer, a file or the log.
+      - name: ThreatFox fetched as abuse.ch allows, its key kept to itself
+        run: python3 tools/test-threatfox.py
+
+      # apply.php's external alias for it, made only while a key is saved, the key read as OPNsense's
+      # write-only field gives it.
+      - name: ThreatFox's alias made only with a key
+        run: php tools/test-threatfox.php
+
   syntax:
     name: syntax
     runs-on: ubuntu-latest

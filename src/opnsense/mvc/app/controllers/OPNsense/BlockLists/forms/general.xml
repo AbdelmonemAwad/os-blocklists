@@ -16,6 +16,12 @@
         <help>Public lists of addresses to block, each fetched by the firewall into an alias of its own (blocklists_...), as often as the next setting says. The Lists tab says what each one is and whose terms it comes under.</help>
     </field>
     <field>
+        <id>blocklists.general.threatfox_key</id>
+        <label>abuse.ch Auth-Key</label>
+        <type>password</type>
+        <help>For the list ThreatFox: command-and-control addresses, in Address lists: abuse.ch serves it only with the Auth-Key of an account of its own, free at auth.abuse.ch (in its profile, under Optional). The firewall sends the key to abuse.ch in the address of each download, over HTTPS, as abuse.ch asks, and nothing else of its own - no address of its networks, no log, no setting; abuse.ch sees the request come from its public address, as any server does. The key is kept in the configuration and never shown on this page again: leave the field empty to keep it. ThreatFox's whole export is fetched once a day, as abuse.ch asks, and its recent additions as often as Fetch the lists says. For commercial use abuse.ch may ask for a paid subscription.</help>
+    </field>
+    <field>
         <id>blocklists.general.refresh</id>
         <label>Fetch the lists</label>
         <type>dropdown</type>

@@ -16,6 +16,12 @@
  * (updatefreq.php). An alias made before is given it here too, and at every install and update by
  * fetch-frequency.php, which changes nothing else of the aliases (until 2026-11-16 every alias was
  * fetched once a day).
+ * ThreatFox (feeds.json "key": "abuse.ch", 2026-11-17) is no URL table: abuse.ch serves it only with the
+ * owner's Auth-Key in the address, as a zipped CSV of ip:port entries, so threatfox.py fetches it and
+ * fills its table. Its alias is an external one ("External (advanced)"), whose table OPNsense declares
+ * and leaves to the script, and it is made only while an Auth-Key is saved: without one there is
+ * nothing to fetch it with, so it is not made - or is removed, as an unchosen list's - and the answer
+ * says why.
  * The block rules are not written here: plugins.inc.d/blocklists.inc registers them from these
  * aliases at every filter reload, so they are never among the owner's own rules.
  *
@@ -45,14 +51,30 @@ foreach (array_keys($feeds) as $id) {
 $settings = new BlockLists();
 $on = (string)$settings->general->enabled === '1';
 $refresh = (string)$settings->general->refresh;
+/* an UpdateOnlyTextField: (string) of it is always "", getValue() what is saved - only whether */
+$key_saved = $settings->general->threatfox_key->getValue() !== '';
 
 $want = [];
+$report = [];
 if ($on) {
     foreach (array_filter(explode(',', (string)$settings->general->feeds)) as $id) {
-        if (isset($feeds[$id])) {
+        if (!isset($feeds[$id]) || !is_array($feeds[$id])) {
+            continue;
+        }
+        $feed = $feeds[$id];
+        if (($feed['key'] ?? '') === 'abuse.ch') {
+            if ($key_saved) {
+                $want[PREFIX . $id] = [
+                    'type' => 'external', 'content' => '', 'proto' => '', 'updatefreq' => '',
+                    'description' => 'Block Lists: ' . $feed['name'],
+                ];
+            } else {
+                $report[] = PREFIX . $id . ': no abuse.ch Auth-Key saved - not made, nothing fetched';
+            }
+        } elseif (isset($feed['url'])) {
             $want[PREFIX . $id] = [
-                'type' => 'urltable', 'content' => $feeds[$id]['url'], 'proto' => $feeds[$id]['proto'],
-                'updatefreq' => blocklists_updatefreq($feeds[$id], $refresh), 'description' => 'Block Lists: ' . $feeds[$id]['name'],
+                'type' => 'urltable', 'content' => $feed['url'], 'proto' => $feed['proto'],
+                'updatefreq' => blocklists_updatefreq($feed, $refresh), 'description' => 'Block Lists: ' . $feed['name'],
             ];
         }
     }
@@ -67,7 +89,6 @@ if ($on) {
 
 $model = new Alias();
 $text = file_get_contents('/conf/config.xml');
-$report = [];
 
 foreach (iterator_to_array($model->aliases->alias->iterateItems()) as $uuid => $alias) {
     $name = (string)$alias->name;

@@ -333,12 +333,27 @@ namespace {
     check(count(described($rules, 'Block Lists: blocklists_feodo from inside')) === 0, 'feodo switched off: no inside rule');
     check(count(rules(['enabled' => '0'], $aliases)) === 0, 'plugin off: no rule');
 
-    /* the catalogue itself: feodo is marked, a "c2" is true or absent */
+    /* the catalogue itself: feodo and threatfox are marked, a "c2" is true or absent */
     $real = json_decode(file_get_contents($root . '/src/opnsense/scripts/blocklists/feeds.json'), true);
     check(($real['feodo']['c2'] ?? null) === true, 'feeds.json: feodo is a command-and-control list');
+    check(($real['threatfox']['c2'] ?? null) === true, 'feeds.json: threatfox is a command-and-control list');
     foreach ($real as $id => $feed) {
         check(!array_key_exists('c2', $feed) || $feed['c2'] === true, "feeds.json: $id's c2 is true or absent");
     }
+
+    /* with that catalogue, ThreatFox's alias as apply.php makes it - external, both families - is
+       blocked and logged from inside as Feodo's is, by the description os-netreport reads */
+    file_put_contents(BLOCKLISTS_FEEDS, json_encode($real));
+    $rules = rules(['enabled' => '1', 'direction' => 'both', 'log' => '0'], [
+        ['name' => 'blocklists_feodo', 'enabled' => '1', 'proto' => 'IPv4', 'type' => 'urltable'],
+        ['name' => 'blocklists_threatfox', 'enabled' => '1', 'proto' => '', 'type' => 'external'],
+    ]);
+    $tf = described($rules, 'Block Lists: blocklists_threatfox from inside');
+    check(count($tf) === 2 && $tf[0]['ipprotocol'] === 'inet' && $tf[1]['ipprotocol'] === 'inet6'
+        && $tf[0]['log'] === true && $tf[0]['to'] === '<blocklists_threatfox>' && $tf[0]['interface'] === implode(',', $want),
+        'ThreatFox: "from inside" on the inside interfaces, logged, IPv4 and IPv6');
+    check(count(described($rules, 'Block Lists: blocklists_threatfox in')) === 2
+        && count(described($rules, 'Block Lists: blocklists_threatfox out')) === 2, 'ThreatFox: in and out, both families');
 
     @unlink(BLOCKLISTS_FEEDS);
     @rmdir($dir);

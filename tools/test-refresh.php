@@ -48,10 +48,19 @@ $want = [
     'cins_army' => [24, 24, 24, 24],
     'blocklist_de' => [2, 6, 12, 24],         /* generated every 30 minutes */
 ];
-check(array_keys($feeds) == array_keys($want), 'every feed of feeds.json is checked here');
+/* ThreatFox (2026-11-17) is no URL table: threatfox.py fetches it at abuse.ch's pace (tools/test-threatfox.py) */
+$own = array_filter($feeds, function ($feed) {
+    return !isset($feed['url']);
+});
+check(array_keys($own) === ['threatfox'] && ($own['threatfox']['key'] ?? '') === 'abuse.ch',
+    'the one list without a URL is ThreatFox, fetched by the plugin with the abuse.ch key');
+check(array_keys(array_diff_key($feeds, $own)) == array_keys($want), 'every URL table of feeds.json is checked here');
 foreach ($feeds as $id => $feed) {
     check(is_int($feed['min_hours'] ?? null) || is_float($feed['min_hours'] ?? null), "$id: min_hours is a number");
     check(!array_key_exists('days', $feed), "$id: no days key left behind");
+    if (isset($own[$id])) {
+        continue;
+    }
     foreach (['h2', 'h6', 'h12', 'h24'] as $i => $choice) {
         $f = blocklists_updatefreq($feed, $choice);
         $h = hours($f);
@@ -94,7 +103,7 @@ check($options === array_keys(BLOCKLISTS_REFRESH), 'the model offers what update
 $form = file_get_contents($root . '/src/opnsense/mvc/app/controllers/OPNsense/BlockLists/forms/general.xml');
 check(strpos($form, '<id>blocklists.general.refresh</id>') !== false, 'the form shows it');
 $apply = file_get_contents($root . '/src/opnsense/scripts/blocklists/apply.php');
-check(strpos($apply, "blocklists_updatefreq(\$feeds[\$id], \$refresh)") !== false, 'apply.php writes it for each feed');
+check(strpos($apply, "'updatefreq' => blocklists_updatefreq(\$feed, \$refresh)") !== false, 'apply.php writes it for each feed');
 
 /*
  * The install's and the update's step (blocklists_write_frequency(), which fetch-frequency.php runs):
@@ -177,6 +186,7 @@ $given = [
     $alias('blocklists_mine', '1', 'urltable', '0.5'),                  /* the owner's, not a feed: left */
     $alias('mine', '1', 'urltable', '0.5'),                             /* the owner's: left */
     $alias('blocklists_et_compromised', '1', 'network', '0.5'),         /* made another type by hand: left */
+    $alias('blocklists_threatfox', '1', 'external', ''),               /* threatfox.py's, no URL table: left */
 ];
 $model = new FreqModel($given);
 $before = $model->state();

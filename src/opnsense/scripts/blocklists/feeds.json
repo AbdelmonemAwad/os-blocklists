@@ -24,6 +24,15 @@
   "what": "Command servers of botnets (Dridex, Emotet, QakBot and others) seen active, as abuse.ch recommends blocking them.",
   "terms": "https://abuse.ch/terms-of-use/"
  },
+ "threatfox": {
+  "name": "ThreatFox: command-and-control addresses",
+  "key": "abuse.ch",
+  "proto": "",
+  "min_hours": 1,
+  "c2": true,
+  "what": "Command-and-control servers of malware reported to abuse.ch's ThreatFox in the last six months, as addresses. Fetched with an abuse.ch Auth-Key: its whole export once a day, its recent additions as often as Fetch the lists says.",
+  "terms": "https://abuse.ch/terms-of-use/"
+ },
  "et_compromised": {
   "name": "Emerging Threats compromised hosts",
   "url": "https://rules.emergingthreats.net/blockrules/compromised-ips.txt",

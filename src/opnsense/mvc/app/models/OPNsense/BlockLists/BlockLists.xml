@@ -24,11 +24,26 @@
                     <spamhaus_drop>Spamhaus DROP (IPv4)</spamhaus_drop>
                     <spamhaus_dropv6>Spamhaus DROP (IPv6)</spamhaus_dropv6>
                     <feodo>abuse.ch Feodo Tracker</feodo>
+                    <threatfox>ThreatFox: command-and-control addresses</threatfox>
                     <et_compromised>Emerging Threats compromised hosts</et_compromised>
                     <cins_army>CINS Army</cins_army>
                     <blocklist_de>blocklist.de (all)</blocklist_de>
                 </OptionValues>
             </feeds>
+            <!--
+                The owner's abuse.ch Auth-Key, for ThreatFox (2026-11-17): scripts/blocklists/threatfox.py
+                sends it to abuse.ch in the address of each export, as abuse.ch asks. An UpdateOnlyTextField,
+                OPNsense's write-only field: the settings' answer to the page has it empty, and an empty
+                value from the form keeps the key saved. PHP reads it with getValue() - (string) of such a
+                field is always "". Only the characters an address carries as they are (RFC 3986's
+                unreserved), and nothing after them (D: not a newline either), so it can never change the
+                path it is put in; threatfox.py checks the same.
+            -->
+            <threatfox_key type="UpdateOnlyTextField">
+                <Required>N</Required>
+                <Mask>/^[A-Za-z0-9._~-]{8,128}$/D</Mask>
+                <ValidationMessage>An abuse.ch Auth-Key is 8 to 128 letters and digits, and may have . _ ~ or -.</ValidationMessage>
+            </threatfox_key>
             <!--
                 How often each feed's alias is fetched again (scripts/blocklists/updatefreq.php): the
                 longer of this and the feed's own minimum in feeds.json. The keys are read there.

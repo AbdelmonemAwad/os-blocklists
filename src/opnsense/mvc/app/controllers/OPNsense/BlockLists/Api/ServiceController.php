@@ -88,8 +88,9 @@ class ServiceController extends ApiControllerBase
 
     /**
      * the aliases from the settings just saved, then the filter (which registers the rules) and the
-     * aliases (which fetches the lists) reloaded the way Firewall: Aliases reloads them, then a first
-     * round of cutting
+     * aliases (which fetches the lists) reloaded the way Firewall: Aliases reloads them, ThreatFox's
+     * list fetched in the background (threatfox.py --apply: a download may take minutes, and Apply
+     * does not wait for it), then a first round of cutting
      */
     public function applyAction()
     {
@@ -104,6 +105,7 @@ class ServiceController extends ApiControllerBase
         $backend->configdRun('filter reload skip_alias');
         $backend->configdRun('template reload OPNsense/Filter');
         $backend->configdRun('filter refresh_aliases');
+        $backend->configdRun('blocklists threatfox', true);
         $result['cut'] = json_decode($backend->configdRun('blocklists cut'), true);
         $result['ja4'] = json_decode($backend->configdRun('blocklists ja4'), true);
         return $result;
