@@ -17,7 +17,7 @@
  * registered before the table's others: `block in log quick ... to <blocklists_<id>>`, described
  * "Block Lists: blocklists_<id> from inside", logged whatever the "log" setting. The "out" rule
  * matches where the packet leaves the firewall, after outbound NAT, so behind NAT its log line names
- * the firewall's own WAN address (seen on an XGS 3300, 2026-11-17) and not the device; this one
+ * the firewall's own WAN address (seen on an XGS 3300, 2026-11-16) and not the device; this one
  * matches where the packet enters from the LAN, before NAT, and its log line carries the device's own
  * address - os-netreport reads it by that description (from /tmp/rules.debug, so the rule keeps the
  * label OPNsense gives it). One log line per blocked packet, about 220 bytes (270 for TCP): a device

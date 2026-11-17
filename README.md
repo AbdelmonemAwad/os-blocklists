@@ -19,7 +19,7 @@
 
 # Block Lists for OPNsense
 
-Block lists in one place: addresses, DNS names, countries and JA4 fingerprints of TLS clients, gathered into one page - and on a Sophos XGS ~~cut by the coprocessor in hardware~~ a cut connection taken out of the coprocessor with its state (the coprocessor holds no address list of its own to block by - os-xgs-npu's hardware-drop research, issue 519).
+Block lists in one place: addresses, DNS names, countries and JA4 fingerprints of TLS clients, gathered into one page - and on a Sophos XGS ~~cut by the coprocessor in hardware~~ a cut connection dropped on the coprocessor at once where os-xgs-npu's "Cut in hardware" is on and outbound is blocked too, and else taken out of it with its state (the coprocessor holds no address list of its own to block by - os-xgs-npu's hardware-drop research, issue 519).
 
 > ~~**Planned - nothing here runs yet.** This repository was opened on 2026-10-22 to hold
 > Block Lists as a plugin of its own. No code has been written or moved into it, and there is no
@@ -50,16 +50,20 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
   own, `blocklists_<id>`, with counters on, fetched by OPNsense again every two hours by default
   (below);
 - **how often the lists are fetched** - "Fetch the lists": every 2 hours (the default), 6, 12 or 24,
-  but never more often than a list's publisher allows, kept for each list in `feeds.json`
-  (`min_hours`): Spamhaus DROP and DROPv6 once a day (Spamhaus's DROP FAQ); Feodo Tracker no more
-  often than every 15 minutes (abuse.ch generates it every 5 and recommends fetching it at least
-  every 15); blocklist.de no more often than every 30 minutes (it is generated that often); Emerging
-  Threats and CINS Army, which publish no rule, once a day. So with the default, Feodo Tracker and
+  and for each list no more often than the floor kept for it in `feeds.json` (`min_hours`):
+  Spamhaus DROP and DROPv6 once a day (Spamhaus's DROP FAQ); Feodo Tracker every 15 minutes at the
+  most, a floor of this plugin's own (abuse.ch generates it every 5 and recommends fetching it at
+  least every 15: no limit of its own); blocklist.de every 30 minutes at the most (it is generated
+  that often); Emerging Threats and CINS Army, which publish no rule, once a day. So with the default, Feodo Tracker and
   blocklist.de are fetched every two hours and the others once a day. The longer of the two is written into the alias's `updatefreq`, in
   days with a fraction as OPNsense 26.7 takes it (0.083333 for two hours; OPNsense's alias updater
   checks every minute and takes anything under a second for never, which nothing here comes near).
-  Until 2026-11-17 every list was fetched once a day; **an alias made before keeps its old frequency
-  until the plugin's next Apply**, which writes the new one into every alias it owns;
+  A list is fetched at once, whatever its floor, when its alias is made again: the list chosen
+  again, or the plugin or the alias switched off and on. Until 2026-11-16 every list was fetched
+  once a day; an alias made before takes the new frequency at the plugin's next Apply, which writes
+  it into every alias it owns - and the update that brings this runs Apply itself where the
+  plugin's aliases are there (`pkg/post-install.sh`), rewriting them in place, so none is fetched
+  for it;
 - **countries** - one GeoIP alias, `blocklists_countries` (it needs a GeoIP source in Firewall:
   Aliases);
 - **the block rules** - registered by the plugin at every filter reload (`plugins.inc.d/blocklists.inc`,
@@ -68,12 +72,14 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
   the plugin off or removing it leaves nothing there;
 - **a device reaching a command-and-control list, logged by its own address** - a list marked
   `"c2": true` in `feeds.json` (Feodo Tracker today) gets one more rule while outbound is blocked
-  (Both ways): `block in log quick` from any to `<blocklists_<id>>`, on every interface, described
+  (Both ways): `block in log quick` from any to `<blocklists_<id>>`, on the inside interfaces -
+  those with an address of their own and no gateway, never the WAN, so that nothing coming in to an
+  address of the firewall itself is blocked by it ahead of the anti-lockout rule - described
   `Block Lists: blocklists_<id> from inside`, logged whatever "Log blocked packets" says, and before
   the list's other rules (all are priority 1, and OPNsense 26.7 writes one priority's rules in the
   order they were registered). Why: the outbound rule matches where a packet leaves the firewall,
   after outbound NAT, so behind NAT its log line names the firewall's WAN address, never the device
-  (seen on an XGS 3300, 2026-11-17); this one matches where the packet comes in from the LAN, before
+  (seen on an XGS 3300, 2026-11-16); this one matches where the packet comes in from the LAN, before
   NAT, and its line carries the device's own address - os-netreport's command-and-control alert reads
   it by that description. It writes one line to the filter log for every packet it blocks, about 220
   bytes (270 for TCP), and keeps no state, so an infected device that retries all day grows the log
@@ -107,15 +113,23 @@ which has not been changed: they still run where it is installed, for the lists 
 XGS: Settings names. Here, a list or a fingerprint named there is left to os-xgs-npu, so nothing is
 cut twice; everything else is this plugin's.
 
-**Cut in hardware too** (since 2026-11-17). Where os-xgs-npu is installed
+**Cut in hardware too** (since 2026-11-16). Where os-xgs-npu is installed
 (`/usr/local/opnsense/scripts/xgs/hwdrop.py` is there), `cut.py` and `ja4_cut.py` call its hardware
 drop before they kill the pf states, as its own `lists_cut.py` and `ja4_cut.py` do: `cut.py` once a
 run with every list's new entries (`hwdrop.drop_addresses`), `ja4_cut.py` once a reading with each
 cut state's ends and protocol (`hwdrop.drop_ends`). With XGS: Settings "Cut in hardware" on, the
-coprocessor drops those connections at once, both ways; off, or with no driver table, it drops
-nothing and says 0. The module is loaded from os-xgs-npu's place, not copied, and only when there is
-something to cut; the count is in the summary, the page's "Open connections" line and the system log
-(`N connections dropped in hardware`). Without os-xgs-npu nothing changes.
+coprocessor drops those connections at once, both ways, and keeps them dropped while their senders
+go on sending (they leave it about 20 seconds after their frames stop, as os-xgs-npu measured); off,
+or with no driver table, it drops nothing and says 0. `cut.py` drops in hardware only while the lists
+block outbound too (Both ways): under Inbound only the rules let such a connection out, and it would
+stay dead on the coprocessor - its pf state is killed as before, and the connection made again goes
+through. A connection dropped there is not handed back when its address leaves a list, the list is
+unchosen or the plugin turned off: it ends when its sender stops, or is handed back on XGS:
+Offloaded Flows. The hardware step has 5 seconds; past them it is left, said in the system log, and
+the pf cut goes on without it. The module is loaded from os-xgs-npu's place, not copied, and only
+when there is something to cut; the count is in the summary, the page's "Open connections" line (for
+`ja4_cut.py`, the JA4 tab's "Last run" line) and the system log (`N connections dropped in
+hardware`). Without os-xgs-npu nothing changes.
 
 ## Not yet, and why
 
@@ -220,6 +234,19 @@ second machine's connections:
   19:49:25; a fingerprint listed in the middle of the minute was cut at once, its one state with it.
   Apply's own answer just after the listing still read `cut by TLS fingerprint: no fingerprint
   listed`.
+
+On the second XGS 3300 on 2026-11-16 (22:00-22:12 UTC), Feodo Tracker chosen with its log on and the
+general logging off: the inside rule first among the plugin's and logged; a connection from the XGS
+136 behind it to a test address put into Feodo's table blocked where it came in, the line naming the
+136's own address, not the WAN's; os-netreport's alert and its infected.json entry from it. That day
+Feodo Tracker held one address (phase 0's reading), so the rule rarely fires. The rule was floating
+then; on the inside interfaces only, and the hardware drop's Inbound only and deadline, are to be run
+on a firewall before this is merged.
+
+Its table drives os-netreport's alert and os-portguard's isolation: OPNsense fetches an alias's URL
+without checking the server's certificate unless "Check certificate of aliases URLs" is on
+(Firewall: Settings: Advanced), and takes any answer of the server's as the list - turn it on where a
+command-and-control list is chosen.
 
 Still not tested: the snapshot written only when its table changed, the log read a line at a time,
 the field refusing all but `t` fingerprints, the checks before the copy, and the removal.

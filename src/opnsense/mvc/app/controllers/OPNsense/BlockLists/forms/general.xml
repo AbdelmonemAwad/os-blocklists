@@ -19,7 +19,7 @@
         <id>blocklists.general.refresh</id>
         <label>Fetch the lists</label>
         <type>dropdown</type>
-        <help>How often the firewall fetches each address list again. A list is never fetched more often than its publisher allows: Spamhaus DROP once a day, as Spamhaus asks, and Emerging Threats and CINS Army, which publish no rule, once a day too. A change reaches the lists at the next Apply.</help>
+        <help>How often the firewall fetches each address list again. Each list keeps a floor of its own: Spamhaus DROP once a day, as Spamhaus asks, and Emerging Threats and CINS Army, which publish no rule, once a day too. A list is fetched at once, whatever its floor, when its alias is made again: the list chosen again, or the plugin or the alias switched off and on. A change reaches the lists at the next Apply, and at the plugin's update.</help>
     </field>
     <field>
         <id>blocklists.general.countries</id>
@@ -37,13 +37,13 @@
         <id>blocklists.general.log</id>
         <label>Log blocked packets</label>
         <type>checkbox</type>
-        <help>Write every packet the rules block to the firewall log. A long list blocks a lot. A device inside trying to reach a command-and-control list (Feodo Tracker) is logged whatever this says, by its own address, so it can be found.</help>
+        <help>Write every packet the rules block to the firewall log. A long list blocks a lot. With Both ways, a device inside trying to reach a command-and-control list (Feodo Tracker) is logged whatever this says, by its own address, so it can be found.</help>
     </field>
     <field>
         <id>blocklists.general.cut</id>
         <label>Cut open connections</label>
         <type>checkbox</type>
-        <help>A block rule stops new connections only. With this on, a connection already open to or from an address a list has just gained is cut within a minute, and on a Sophos XGS taken out of the coprocessor with it.</help>
+        <help>A block rule stops new connections only. With this on, a connection already open to or from an address a list has just gained is cut within a minute. On a Sophos XGS with os-xgs-npu's Cut in hardware on, and outbound blocked too, it is also dropped on the coprocessor at once, and kept dropped there while its sender goes on sending: an address that leaves a list does not hand it back (XGS: Offloaded Flows does).</help>
     </field>
     <field>
         <id>blocklists.general.ja4</id>

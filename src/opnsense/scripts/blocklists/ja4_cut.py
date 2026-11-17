@@ -38,7 +38,7 @@ The log is read a line at a time and only what is looked for is kept (2026-10-29
 it was held in memory before anything was looked at, so a log of a week of TLS was held whole - by
 --seen at every press of the page's button, and by the search for a fingerprint just listed.
 
-Cut in hardware too (2026-11-17): where os-xgs-npu is installed, its hwdrop.drop_ends() is called
+Cut in hardware too (2026-11-16): where os-xgs-npu is installed, its hwdrop.drop_ends() is called
 before the pf states are killed, once a reading with the ends of every state being cut, each state's
 apart and with its protocol, as its own ja4_cut.py does - with XGS: Settings "Cut in hardware" on,
 the coprocessor drops those connections at once, both ways. It returns how many it dropped, 0 with

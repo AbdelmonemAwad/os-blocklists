@@ -25,6 +25,13 @@ if [ -f /usr/local/etc/rc.configure_plugins ]; then
 	/usr/local/etc/rc.configure_plugins POST_INSTALL
 fi
 
+# An update from a version that fetched every list once a day (2026-11-16): the aliases this plugin made
+# take the frequency it now writes. Apply rewrites them in place, so none is fetched at once for it; and
+# only where its aliases are there - a fresh install has none, and nothing is made here.
+if grep -q '<name>blocklists_' /conf/config.xml 2> /dev/null && [ -x /usr/local/opnsense/scripts/blocklists/apply.php ]; then
+	/usr/local/opnsense/scripts/blocklists/apply.php > /dev/null 2>&1 || true
+fi
+
 # the rules hook is read at a filter reload; an upgrade's new hook takes effect now
 [ -f /usr/local/sbin/configctl ] && /usr/local/sbin/configctl filter reload > /dev/null 2>&1 || true
 

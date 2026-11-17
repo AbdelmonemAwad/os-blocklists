@@ -29,7 +29,7 @@ list was off was compared with it, found old, and never cut. It is written only 
 changed - a list of 15,000 entries was rewritten every minute, a third of a megabyte each time - and
 by one run at a time: the page's Apply and the minute's run wrote the same files.
 
-Cut in hardware too (2026-11-17): where os-xgs-npu is installed, its hwdrop.drop_addresses() is
+Cut in hardware too (2026-11-16): where os-xgs-npu is installed, its hwdrop.drop_addresses() is
 called before the pf states are killed, once a run with every list's new entries, as its own
 lists_cut.py does - with XGS: Settings "Cut in hardware" on, the coprocessor drops those connections
 at once, both ways. It returns how many it dropped, 0 with the setting off or no driver table, and

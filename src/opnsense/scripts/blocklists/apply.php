@@ -13,7 +13,7 @@
  * uuid, left in place switched off, so no rule or setting of the owner's is left pointing at nothing.
  * Each feed's alias is fetched again as often as "Fetch the lists" says, never more often than its
  * publisher allows (updatefreq.php); an alias made before is given the frequency here too, so the
- * next Apply after an update changes it (until 2026-11-17 every alias was fetched once a day).
+ * next Apply after an update changes it (until 2026-11-16 every alias was fetched once a day).
  * The block rules are not written here: plugins.inc.d/blocklists.inc registers them from these
  * aliases at every filter reload, so they are never among the owner's own rules.
  *

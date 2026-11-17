@@ -261,6 +261,9 @@
         <div id="bl-lists-none" class="text-muted" style="display: none; padding: 0 15px 10px;">
             {{ lang._('No list is chosen. Choose lists and countries in Settings, then Apply.') }}
         </div>
+        <div class="text-muted" style="padding: 0 15px 10px;">
+            {{ lang._('For a command-and-control list, Blocked in counts the devices inside too: they are blocked where they enter the firewall.') }}
+        </div>
         <div style="padding: 0 15px 15px;">
             {{ lang._('Open connections') }}: <span id="bl-cut">-</span>
         </div>
