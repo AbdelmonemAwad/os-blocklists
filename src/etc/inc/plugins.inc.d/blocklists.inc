@@ -14,8 +14,12 @@
  * well, so a host inside cannot reach one either.
  *
  * A command-and-control list (feeds.json "c2": true) has one more rule when outbound is blocked,
- * registered before the table's others: `block in log quick ... to <blocklists_<id>>`, described
- * "Block Lists: blocklists_<id> from inside", logged whatever the "log" setting. The "out" rule
+ * registered before the table's others: `block in log quick ... to <blocklists_<id>>` on the inside
+ * interfaces (blocklists_inside(), below; none, no rule), described "Block Lists: blocklists_<id> from
+ * inside", logged whatever the "log" setting. On an inside interface it comes before every other rule,
+ * the anti-lockout rule too (priority 5, filter.lib.inc:579-595): should the firewall's own public
+ * address be on the list, a device inside reaching it - the GUI by the firewall's public name, a port
+ * forward through NAT reflection - is blocked and logged by it as well. The "out" rule
  * matches where the packet leaves the firewall, after outbound NAT, so behind NAT its log line names
  * the firewall's own WAN address (seen on an XGS 3300, 2026-11-16) and not the device; this one
  * matches where the packet enters from the LAN, before NAT, and its log line carries the device's own
@@ -34,23 +38,72 @@ use OPNsense\Firewall\Plugin;
 
 /*
  * The inside interfaces, as a rule's interface list: those of the firewall's own networks, where a
- * device's packet enters before outbound NAT - an address of their own (a static IPv4 address, or IPv6
- * static or tracked) and no gateway, IPv4 or IPv6, in the filter's interface mapping (filter.lib.inc
- * gives a WAN its gateway; one taking its address from DHCP or PPPoE has no static address, its lease
- * there or not). Until 2026-11-17 the rule had no interface: it blocked what came in on the WAN to an
- * address of the firewall itself on a list, ahead of the anti-lockout rule, and logged the internet's
- * senders as "from inside".
+ * device's packet enters before outbound NAT. One is inside when it has an address of its own - a
+ * static IPv4 address, or IPv6 static, tracked (track6) or by identity association (idassoc6), which
+ * OPNsense 26.7 treats alike (interfaces.inc:709) - and nothing says it leads out:
+ *
+ *  - no gateway names it: none of the gateways the filter was given ($fw->getGateways(), Gateways.php:
+ *    getGateways()), IPv4 or IPv6, switched off, defunct or without an address alike, and none chosen in
+ *    its own gateway rules (interfaces.php: "IPv4/IPv6 gateway rules"). The filter's interface mapping
+ *    alone, which this read until 2026-11-17, gives no gateway to a static WAN whose gateway rules are
+ *    Disabled or whose gateway is left to auto-detect, nor to one whose gateway is switched off
+ *    (filter.lib.inc:64-73, Gateways.php:591-617): such a WAN was taken for inside;
+ *  - its address is not taken from outside, in either family: anything but none, a static address,
+ *    track6, idassoc6 or link-local - DHCP, PPPoE, PPTP, L2TP, PPP; DHCPv6, SLAAC, 6rd, 6to4, PPPoEv6 -
+ *    its lease there or not. A DHCP WAN without its lease and with a static IPv6 address was taken for
+ *    inside until 2026-11-17;
+ *  - it is not virtual: the loopback (pf skips it, filter.inc:373), a VPN or interface group, IPsec's
+ *    enc0 - OPNsense's own bogon rules leave them out the same way (filter.lib.inc:332).
+ *
+ * The cost: a LAN with a router behind it, which has a gateway for that router's networks, is left out
+ * too. 26.7's "Upstream Gateway" mark (Gateways.xml defaultgw) cannot tell such a router from a WAN's:
+ * it is off unless ticked, a WAN on DHCP never carries it, and a gateway without it still becomes the
+ * default route when no marked one is up (Gateways.php:314-324, 490-512). Its devices are still blocked
+ * by the outbound rule, logged as the log setting says - behind NAT by the firewall's WAN address.
+ *
+ * Without the gateways (a Plugin the filter did not set up) nothing is inside. A name that would make
+ * an empty element of the list - "" or "0", which OPNsense's Rule takes for no interface and writes as
+ * a floating rule (Rule.php:271, 402-413) - or that holds a comma is never put in it. Until 2026-11-17
+ * the rule had no interface at all: it blocked what came in on the WAN to an address of the firewall
+ * itself on a list, ahead of the anti-lockout rule, and logged the internet's senders as "from inside".
  */
 function blocklists_inside(Plugin $fw)
 {
+    global $config;
+
+    $gateways = $fw->getGateways();
+    if ($gateways === null) {
+        return [];
+    }
+    $named = [];
+    foreach ($gateways->getGateways() as $gateway) {
+        if (!empty($gateway['interface'])) {
+            $named[(string)$gateway['interface']] = true;
+        }
+    }
+
     $inside = [];
     foreach ($fw->getInterfaceMapping() as $key => $intf) {
-        if (!empty($intf['gateway']) || !empty($intf['gatewayv6'])) {
+        $key = (string)$key;
+        if (empty($key) || strpbrk($key, ", \t") !== false || !empty($intf['virtual']) || isset($named[$key])) {
             continue;
+        }
+        $own = $config['interfaces'][$key] ?? [];
+        $own = isset($own[0]) && is_array($own[0]) ? $own[0] : $own;
+        foreach (['gateway', 'gatewayv6'] as $field) {
+            if (is_array($own) && !empty($own[$field]) && $own[$field] !== 'none') {
+                continue 2;
+            }
         }
         $v4 = (string)($intf['ipaddr'] ?? '');
         $v6 = (string)($intf['ipaddrv6'] ?? '');
-        if (is_ipaddrv4($v4) || $v6 === 'track6' || is_ipaddrv6($v6)) {
+        if (!in_array($v4, ['', 'none'], true) && !is_ipaddrv4($v4)) {
+            continue;
+        }
+        if (!in_array($v6, ['', 'none', 'track6', 'idassoc6', 'linklocal'], true) && !is_ipaddrv6($v6)) {
+            continue;
+        }
+        if (is_ipaddrv4($v4) || is_ipaddrv6($v6) || $v6 === 'track6' || $v6 === 'idassoc6') {
             $inside[] = $key;
         }
     }

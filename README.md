@@ -73,8 +73,13 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
 - **a device reaching a command-and-control list, logged by its own address** - a list marked
   `"c2": true` in `feeds.json` (Feodo Tracker today) gets one more rule while outbound is blocked
   (Both ways): `block in log quick` from any to `<blocklists_<id>>`, on the inside interfaces -
-  those with an address of their own and no gateway, never the WAN, so that nothing coming in to an
-  address of the firewall itself is blocked by it ahead of the anti-lockout rule - described
+  those with an address of their own (a static IPv4 address, or IPv6 static, tracked or by identity
+  association) that no gateway names (none in System: Gateways, switched off or not, IPv4 or IPv6,
+  and none chosen in the interface's own gateway rules), that take no address from outside (DHCP,
+  PPPoE, PPTP, L2TP, PPP, DHCPv6, SLAAC, 6rd, 6to4, PPPoEv6, lease or not) and are not virtual (the
+  loopback, a VPN or interface group; one left out is under [Not yet, and why](#not-yet-and-why)),
+  never the WAN, so that nothing coming in to an address of the firewall itself is blocked by it
+  ahead of the anti-lockout rule - described
   `Block Lists: blocklists_<id> from inside`, logged whatever "Log blocked packets" says, and before
   the list's other rules (all are priority 1, and OPNsense 26.7 writes one priority's rules in the
   order they were registered). Why: the outbound rule matches where a packet leaves the firewall,
@@ -147,6 +152,17 @@ hardware`). Without os-xgs-npu nothing changes.
   Intrusion Detection already logs JA4, it is watched within two seconds - since 2026-10-29 the watch
   goes on through the minute with nothing listed; before, a fingerprint listed during the minute waited
   for the next one. Not yet tested.
+- **a LAN with a router behind it has no "from inside" rule** - an interface a gateway is on is not
+  taken for inside, so a LAN whose router to further inside networks is a gateway in System:
+  Gateways is left out too. OPNsense 26.7's "Upstream Gateway" mark cannot tell that router from a
+  WAN's gateway: it is off unless ticked, a WAN on DHCP never has it, and a gateway without it still
+  becomes the default route when no marked one is up. The test is this wide because the narrower one
+  before it, the filter's own gateway for each interface, took a WAN for inside until 2026-11-17 -
+  one whose gateway rules are Disabled, whose gateway is switched off or left to auto-detect, or one
+  on DHCP without its lease and with a static IPv6 address - and the rule then blocked what came in
+  on it to the firewall's own address, were that address listed. That LAN's devices are still
+  blocked by the outbound rule; they are logged only as "Log blocked packets" says, and behind NAT by
+  the firewall's WAN address.
 - **the aliases outlive the plugin** - removed, it leaves them in Firewall: Aliases, blocking nothing,
   and OPNsense goes on fetching their lists; turn Enabled off and Apply before removing it
   ([Installation](#installation)).
@@ -240,8 +256,8 @@ general logging off: the inside rule first among the plugin's and logged; a conn
 136 behind it to a test address put into Feodo's table blocked where it came in, the line naming the
 136's own address, not the WAN's; os-netreport's alert and its infected.json entry from it. That day
 Feodo Tracker held one address (phase 0's reading), so the rule rarely fires. The rule was floating
-then; on the inside interfaces only, and the hardware drop's Inbound only and deadline, are to be run
-on a firewall before this is merged.
+then; on the inside interfaces only (none a gateway is on, none on DHCP or the like, none virtual),
+and the hardware drop's Inbound only and deadline, are to be run on a firewall before this is merged.
 
 Its table drives os-netreport's alert and os-portguard's isolation: OPNsense fetches an alias's URL
 without checking the server's certificate unless "Check certificate of aliases URLs" is on
