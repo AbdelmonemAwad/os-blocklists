@@ -192,9 +192,13 @@ go on sending (they leave it about 20 seconds after their frames stop, as os-xgs
 or with no driver table, it drops nothing and says 0. `cut.py` drops in hardware only while the lists
 block outbound too (Both ways): under Inbound only the rules let such a connection out, and it would
 stay dead on the coprocessor - its pf state is killed as before, and the connection made again goes
-through. A connection dropped there is not handed back when its address leaves a list, the list is
-unchosen or the plugin turned off: it ends when its sender stops, or is handed back on XGS:
-Offloaded Flows. The hardware step has 5 seconds, and they are a hard limit (since 2026-11-17): it
+through. A connection dropped there is handed back to the host when its address leaves every watched
+list - an entry a list loses, a list unchosen or no longer watched, the plugin turned off - by
+`hwdrop.release_addresses` (os-xgs-npu since 2026-11-17), at the next run of `cut.py`; pf then decides
+its frames again. An entry another watched list still holds is left as it is, and a hand-back left at
+its deadline is tried again at the next run. With an os-xgs-npu older than that, it is not handed back
+by address: it ends when its sender stops, or is handed back on XGS: Offloaded Flows. The hardware
+step has 5 seconds, and they are a hard limit (since 2026-11-17): it
 runs in a thread of its own, and at 5 seconds the pf cut goes on whatever the step is doing. The step
 is told to stop and ends at the next connection it looks at, writing no verdict after that - or, if
 a call into the driver never returns, with the process. How many it dropped is then not known, and

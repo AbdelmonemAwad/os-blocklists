@@ -107,6 +107,11 @@ def drop_ends(groups, path='/conf/config.xml'):
     hwdrop_events.events.append(('drop_ends', [(p, sorted(e)) for p, e in groups]))
     ends = groups[0][1]
     return answer(lambda i: all(end in ends for end in sorted(ends)))
+
+
+def release_addresses(contains):
+    hwdrop_events.events.append(('release_addresses', sorted(a for a in hwdrop_events.probe if a in contains)))
+    return answer(lambda i: hwdrop_events.probe[0] in contains)
 '''
 
 EVENTS = types.ModuleType('hwdrop_events')
@@ -148,7 +153,7 @@ TABLES = {'blocklists_feodo': {'203.0.113.0/24'}, 'blocklists_cins_army': {'198.
 
 
 def kinds(events):
-    return [e[0] for e in events if e[0] in ('drop_addresses', 'drop_ends', 'kill')]
+    return [e[0] for e in events if e[0] in ('drop_addresses', 'drop_ends', 'release_addresses', 'kill')]
 
 
 def logs(events):
@@ -321,6 +326,105 @@ def test_cut(tmp, fake):
         fh.write('import no_such_module_here\n')
     summary, events = cut_run(tmp, broken, 3)
     check('dropped' not in summary and kinds(events) == ['kill', 'kill'], 'cut.py: a hwdrop.py that does not load: as without it')
+
+
+def release_run(state, tables, hwdrop_path, result, watched=None):
+    """One run of cut.py over `tables` (name -> entries) - `watched` the lists watched, all of them by
+    default - its state kept in `state` from one run to the next."""
+    os.makedirs(state, exist_ok=True)
+    cut.STATE_DIR, cut.STATUS = state, os.path.join(state, 'status.json')
+    cut.PENDING = os.path.join(state, 'release.json')
+    cut.HWDROP = hwdrop_path
+    cut.watched_lists = lambda path=None: sorted(tables if watched is None else watched)
+    cut.table_entries = lambda name: set(tables[name])
+    cut.subprocess.run = fake_run(CUT_STATES)
+    EVENTS.events[:], EVENTS.result, EVENTS.lock[:] = [], result, []
+    EVENTS.probe = ['203.0.113.5', '198.51.100.7', '192.0.2.200']
+    summary = cut.run()
+    return summary, list(EVENTS.events)
+
+
+def test_release(tmp, fake):
+    """os-xgs-npu's REMAINING A15: a connection dropped on the coprocessor for an address stays dropped
+    while its sender sends; cut.py hands back the connections of the entries no watched list holds any
+    more - a list's lost entries, a list no longer watched - and keeps what a step left at its deadline
+    did not do for the next run."""
+    both = {'blocklists_feodo': {'203.0.113.0/24'}, 'blocklists_cins_army': {'198.51.100.7/32'}}
+    state = os.path.join(tmp, 'release-1')
+    release_run(state, both, fake, 3)
+    summary, events = release_run(state, {'blocklists_feodo': set(), 'blocklists_cins_army': {'198.51.100.7/32'}},
+                                  fake, 2)
+    check(('release_addresses', ['203.0.113.5']) in events and kinds(events) == ['release_addresses'],
+          'cut.py: a list\'s lost entry handed back from hardware, once, with nothing else (%s)' % kinds(events))
+    check(summary.get('released') == 2 and summary['message'].endswith('; 2 handed back from hardware now'),
+          'cut.py: how many handed back, in the summary and the message')
+    check(any('handed back from hardware' in m for m in logs(events)), 'cut.py: said in the system log')
+    check(not os.path.exists(cut.PENDING), 'cut.py: nothing left to hand back')
+    summary, events = release_run(state, {'blocklists_feodo': set(), 'blocklists_cins_army': {'198.51.100.7/32'}},
+                                  fake, 2)
+    check(kinds(events) == [] and 'released' not in summary, 'cut.py: nothing lost since, nothing handed back')
+
+    # held by another watched list: left as it is
+    state = os.path.join(tmp, 'release-2')
+    release_run(state, {'blocklists_feodo': {'203.0.113.0/24'}, 'blocklists_cins_army': {'203.0.113.0/24'}}, fake, 3)
+    summary, events = release_run(state, {'blocklists_feodo': set(), 'blocklists_cins_army': {'203.0.113.0/24'}},
+                                  fake, 3)
+    check(kinds(events) == [], 'cut.py: an entry another watched list still holds is not handed back')
+
+    # a list no longer watched: every entry kept for it handed back
+    state = os.path.join(tmp, 'release-3')
+    release_run(state, both, fake, 3)
+    summary, events = release_run(state, both, fake, 1, watched=['blocklists_cins_army'])
+    check(('release_addresses', ['203.0.113.5']) in events, 'cut.py: a list no longer watched, its entries handed back')
+    check(not os.path.exists(os.path.join(state, cut.snapshot_path('blocklists_feodo').rsplit(os.sep, 1)[-1])),
+          'cut.py: what was kept for it forgotten after')
+
+    # the plugin off - no list watched - every entry handed back
+    state = os.path.join(tmp, 'release-4')
+    release_run(state, both, fake, 3)
+    summary, events = release_run(state, both, fake, 2, watched=[])
+    check(('release_addresses', ['198.51.100.7', '203.0.113.5']) in events,
+          'cut.py: no list watched, every entry handed back (%s)' % events[:1])
+
+    # a step left at its deadline: kept, tried again at the next run; an entry listed again meanwhile left
+    state = os.path.join(tmp, 'release-5')
+    release_run(state, both, fake, 3)
+    saved, cut.HW_DEADLINE = cut.HW_DEADLINE, 1
+    try:
+        summary, events = release_run(state, {'blocklists_feodo': set(), 'blocklists_cins_army': set()}, fake, 'stuck')
+    finally:
+        cut.HW_DEADLINE = saved
+    check(summary.get('released') == cut.UNKNOWN and 'not known' in summary['message'],
+          'cut.py: a hand-back left at its deadline, how many is not known')
+    check(sorted(cut.load(cut.PENDING, [])) == ['198.51.100.7/32', '203.0.113.0/24'],
+          'cut.py: what it did not do kept for the next run')
+    check(settle(cut), 'cut.py: the stuck hand-back has ended')
+    summary, events = release_run(state, {'blocklists_feodo': set(), 'blocklists_cins_army': {'198.51.100.7/32'}},
+                                  fake, 1)
+    check(('release_addresses', ['203.0.113.5']) in events and summary.get('released') == 1,
+          'cut.py: the next run hands back what was kept, not the entry listed again since')
+    check(not os.path.exists(cut.PENDING), 'cut.py: and keeps nothing after')
+
+    # without os-xgs-npu, and with one older than release_addresses: nothing handed back, nothing kept
+    state = os.path.join(tmp, 'release-6')
+    absent = os.path.join(tmp, 'absent', 'hwdrop.py')
+    release_run(state, both, absent, 3)
+    summary, events = release_run(state, {'blocklists_feodo': set(), 'blocklists_cins_army': set()}, absent, 3)
+    check('released' not in summary and kinds(events) == [] and not os.path.exists(cut.PENDING),
+          'cut.py without hwdrop.py: nothing handed back, nothing kept')
+    older = os.path.join(tmp, 'older', 'hwdrop.py')
+    os.makedirs(os.path.dirname(older))
+    with open(fake, encoding='utf-8') as fh:
+        text = fh.read()
+    with open(older, 'w', encoding='utf-8') as fh:
+        fh.write(text[:text.index('def release_addresses')])
+    with open(os.path.join(os.path.dirname(older), 'flows.py'), 'w') as fh:
+        fh.write('')
+    state = os.path.join(tmp, 'release-7')
+    release_run(state, both, older, 3)
+    summary, events = release_run(state, {'blocklists_feodo': set(), 'blocklists_cins_army': set()}, older, 3)
+    check('released' not in summary and kinds(events) == [] and not os.path.exists(cut.PENDING),
+          'cut.py with a hwdrop.py older than release_addresses: nothing handed back, nothing kept, no error')
 
 
 def test_within():
@@ -510,6 +614,7 @@ def main():
         test_outbound(tmp)
         test_within()
         test_cut(runs, fake)
+        test_release(runs, fake)
         test_ja4(runs, fake)
         if hasattr(sys.modules['fcntl'], 'flock'):
             test_ja4_minute(tmp)

@@ -54,6 +54,9 @@ import xml.etree.ElementTree as ET
 CONFIG = '/conf/config.xml'
 STATE_DIR = '/var/db/os-blocklists/cut'
 STATUS = os.path.join(STATE_DIR, 'status.json')
+# Entries no watched list holds any more whose connections are still to be handed back from hardware: a
+# step left at its deadline tries again at the next run (release_in_hardware).
+PENDING = os.path.join(STATE_DIR, 'release.json')
 LOCK = os.path.join(STATE_DIR, 'lock')
 FEEDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'feeds.json')
 PFCTL = '/sbin/pfctl'
@@ -196,6 +199,49 @@ def drop_in_hardware(networks):
         return UNKNOWN
     log(f"{n} connection{'' if n == 1 else 's'} dropped in hardware")
     return n
+
+
+def release_in_hardware(networks):
+    """Connections with either end in `networks` handed back to the host by os-xgs-npu's hwdrop - the
+    entries no watched list holds any more. A connection dropped on the coprocessor for an address
+    stays dropped there while its sender sends, whatever the lists say after (os-xgs-npu's REMAINING
+    A15, 2026-11-17): handed back, pf decides its frames again. How many; UNKNOWN when the step was
+    left at its deadline or failed - the entries are tried again at the next run; None without
+    os-xgs-npu, or with one older than its release_addresses, which hands nothing back by address."""
+    hw = hwdrop()
+    if hw is None or not hasattr(hw, 'release_addresses'):
+        return None
+    match = Matcher(networks)
+    try:
+        n = int(within(HW_DEADLINE, lambda stop: hw.release_addresses(Until(match, stop))) or 0)
+    except HardwareBusy:
+        log('handing back from hardware: a step left at its deadline still runs, none started beside it; '
+            'tried again at the next run')
+        return UNKNOWN
+    except HardwareLate:
+        log(f'handing back from hardware took more than {HW_DEADLINE} s: left there, tried again at the next run')
+        return UNKNOWN
+    except Exception as e:      # it says it never raises; nothing here is stopped by it if it does
+        log(f'handing back from hardware failed, tried again at the next run: {e}')
+        return UNKNOWN
+    if n:
+        log(f"{n} connection{'' if n == 1 else 's'} handed back from hardware: no list holds their address now")
+    return n
+
+
+def unwatched_entries(watched):
+    """Every entry kept for a list no longer watched - unchosen, the cut setting off for it, or the
+    plugin off - read before forget() deletes what was kept."""
+    keep = {os.path.basename(snapshot_path(name)) for name in watched}
+    out = set()
+    try:
+        names = os.listdir(STATE_DIR)
+    except OSError:
+        return out
+    for entry in names:
+        if entry.startswith(PREFIX) and entry.endswith('.json') and entry not in keep:
+            out |= set(load(os.path.join(STATE_DIR, entry), None) or [])
+    return out
 
 
 def dropped_said(n):
@@ -427,6 +473,31 @@ def run():
                     summary['lists'][name]['cut'] += 1
         summary['cut'] = len(killed)
 
+    # Entries a watched list has lost since the last run, and every entry of a list no longer watched:
+    # their connections handed back from hardware, unless a watched list still holds the entry - a step
+    # left at its deadline tries again at the next run, and an entry listed again meanwhile is left.
+    lost = set()
+    for name in added:
+        if kept[name] is not None:
+            lost |= kept[name] - current[name]
+    if read:
+        lost |= unwatched_entries(lists)
+    held = set().union(*current.values()) if current else set()
+    pending = (set(load(PENDING, None) or []) | lost) - held
+    if pending:
+        released = release_in_hardware(sorted(pending))
+        if released is not None:
+            summary['released'] = released
+        if released != UNKNOWN:
+            pending = set()
+    if pending:
+        save(PENDING, sorted(pending))
+    elif os.path.exists(PENDING):
+        try:
+            os.unlink(PENDING)
+        except OSError:
+            pass
+
     for name in added:
         # what was compared, not a second reading: an entry added since is new at the next run; and
         # written only when it is not what was kept already
@@ -456,6 +527,11 @@ def run():
         summary['message'] = 'cut when listed: ' + ', '.join(parts)
         if 'dropped' in summary:
             summary['message'] += '; ' + dropped_said(summary['dropped'])
+        if summary.get('released') == UNKNOWN:
+            summary['message'] += ('; how many were handed back from hardware now is not known, tried again at '
+                                   'the next run')
+        elif summary.get('released'):
+            summary['message'] += '; %d handed back from hardware now' % summary['released']
     save(STATUS, summary)
     return summary
 
