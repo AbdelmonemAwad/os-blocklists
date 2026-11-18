@@ -70,6 +70,15 @@
             return n === null || n === undefined || n === '' ? '-' : Number(n).toLocaleString();
         }
 
+        /* The abuse.ch Auth-Key's field (ThreatFox): the page is never given the key - OPNsense's
+           write-only field answers it empty - so the field says whether one is saved, and Remove the
+           key is there only where one is. */
+        function key_saved(saved) {
+            $(document.getElementById('blocklists.general.threatfox_key')).attr('placeholder',
+                plain(saved ? "{{ lang._('saved - leave empty to keep it') }}" : "{{ lang._('not set') }}"));
+            $('#bl-key-remove').toggle(saved);
+        }
+
         /*
          * Four cards: the address lists (the countries are one of them, an alias like the others),
          * what their rules blocked, the DNS lists and the JA4 fingerprints.
@@ -101,7 +110,18 @@
 
             $('#bl-project').toggle(!!data.project.installed);
             $('#bl-lists-none').toggle(!data.lists.length);
+            /* only where a "from inside" rule was given to pf: a command-and-control list, outbound
+               blocked, an interface that counts as inside */
+            $('#bl-inside-note').toggle(data.lists.some(function (l) { return l.inside; }));
             $('#bl-dns-none').toggle(!data.dns.lists.length);
+
+            /* ThreatFox's line, where the list is chosen: threatfox.py's last word, or why it has none */
+            const tf = data.threatfox || {};
+            $('#bl-threatfox-line').toggle(!!tf.chosen);
+            $('#bl-threatfox').text(plain(!tf.key ?
+                "{{ lang._('no abuse.ch Auth-Key saved: nothing is fetched. Enter one in Settings, then Apply.') }}" :
+                (tf.message || "{{ lang._('not run yet') }}")));
+            key_saved(!!tf.key);
 
             const cut = data.cut.last || {};
             $('#bl-cut').text(plain(data.cut.on ? (cut.message || "{{ lang._('not run yet') }}") : "{{ lang._('Cutting open connections is off.') }}"));
@@ -204,6 +224,20 @@
             $('.selectpicker').selectpicker('refresh');
         });
 
+        /* Remove the key: the one way a saved key is taken out, as an empty field keeps it */
+        $('<button type="button" class="btn btn-default btn-xs" id="bl-key-remove" style="display: none; margin-top: 6px;"/>')
+            .text(plain("{{ lang._('Remove the key') }}"))
+            .insertAfter(document.getElementById('blocklists.general.threatfox_key'))
+            .click(function () {
+                ajaxCall('/api/blocklists/settings/forget_key', {}, function (data) {
+                    const ok = data && data.status === 'ok';
+                    $('#bl-result').attr('class', ok ? 'text-muted' : 'alert alert-danger').text(plain(ok ?
+                        "{{ lang._('abuse.ch Auth-Key removed: nothing more is sent to abuse.ch. Apply removes the ThreatFox list.') }}" :
+                        "{{ lang._('abuse.ch Auth-Key could not be removed.') }}")).show();
+                    refresh();
+                });
+            });
+
         $('#applyAct').click(function () {
             const $button = $(this).prop('disabled', true);
             const $progress = $('#frm_general_progress').addClass('fa fa-spinner fa-pulse');
@@ -212,6 +246,8 @@
                 $button.prop('disabled', false);
             };
             saveFormToEndpoint('/api/blocklists/settings/set', 'frm_general', function () {
+                /* a key typed is saved now: the page keeps no copy of it */
+                $(document.getElementById('blocklists.general.threatfox_key')).val('');
                 ajaxCall('/api/blocklists/service/apply', {}, function (data) {
                     done();
                     const lines = (data && data.changes ? data.changes : []).concat(data && data.errors ? data.errors : []);
@@ -260,6 +296,12 @@
         </table>
         <div id="bl-lists-none" class="text-muted" style="display: none; padding: 0 15px 10px;">
             {{ lang._('No list is chosen. Choose lists and countries in Settings, then Apply.') }}
+        </div>
+        <div id="bl-inside-note" class="text-muted" style="display: none; padding: 0 15px 10px;">
+            {{ lang._('For a command-and-control list, Blocked in also counts the packets of devices inside that tried to reach it: they are blocked where they enter the firewall.') }}
+        </div>
+        <div id="bl-threatfox-line" style="display: none; padding: 0 15px 10px;">
+            ThreatFox: <span id="bl-threatfox">-</span>
         </div>
         <div style="padding: 0 15px 15px;">
             {{ lang._('Open connections') }}: <span id="bl-cut">-</span>

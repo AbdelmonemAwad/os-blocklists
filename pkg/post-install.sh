@@ -25,6 +25,16 @@ if [ -f /usr/local/etc/rc.configure_plugins ]; then
 	/usr/local/etc/rc.configure_plugins POST_INSTALL
 fi
 
+# The fetch frequency the settings say, written into the plugin's own aliases already there - for an
+# update from a version that fetched every list once a day (until 2026-11-16). fetch-frequency.php
+# changes the updatefreq of those switched on and nothing else, saves config.xml only when one
+# changed, and says what it did here and in the system log (blocklists); install/install.sh runs the
+# same step. Until 2026-11-17 this ran the page's whole Apply, its output thrown away. Before the
+# filter reload below, which hands the aliases' settings to OPNsense's alias updater.
+if [ -x /usr/local/opnsense/scripts/blocklists/fetch-frequency.php ]; then
+	/usr/local/opnsense/scripts/blocklists/fetch-frequency.php || true
+fi
+
 # the rules hook is read at a filter reload; an upgrade's new hook takes effect now
 [ -f /usr/local/sbin/configctl ] && /usr/local/sbin/configctl filter reload > /dev/null 2>&1 || true
 

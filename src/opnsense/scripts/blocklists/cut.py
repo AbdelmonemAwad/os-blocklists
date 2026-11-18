@@ -28,9 +28,18 @@ what it names, as its first run did. Until 2026-10-29 it was kept, and a connect
 list was off was compared with it, found old, and never cut. It is written only when the table
 changed - a list of 15,000 entries was rewritten every minute, a third of a megabyte each time - and
 by one run at a time: the page's Apply and the minute's run wrote the same files.
+
+Cut in hardware too (2026-11-16): where os-xgs-npu is installed, its hwdrop.drop_addresses() is
+called before the pf states are killed, once a run with every list's new entries, as its own
+lists_cut.py does - with XGS: Settings "Cut in hardware" on, the coprocessor drops those connections
+at once, both ways. It returns how many it dropped, 0 with the setting off or no driver table, and
+the count is in the summary and the system log. Without os-xgs-npu nothing changes. See hwdrop().
+The step has HW_DEADLINE seconds, in a thread of its own, and then the pf cut goes on whatever it
+is doing (within(), since 2026-11-17); its count is then "unknown".
 """
 import bisect
 import fcntl
+import importlib.util
 import ipaddress
 import json
 import os
@@ -38,18 +47,23 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import xml.etree.ElementTree as ET
 
 CONFIG = '/conf/config.xml'
 STATE_DIR = '/var/db/os-blocklists/cut'
 STATUS = os.path.join(STATE_DIR, 'status.json')
+# Entries no watched list holds any more whose connections are still to be handed back from hardware: a
+# step left at its deadline tries again at the next run (release_in_hardware).
+PENDING = os.path.join(STATE_DIR, 'release.json')
 LOCK = os.path.join(STATE_DIR, 'lock')
 FEEDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'feeds.json')
 PFCTL = '/sbin/pfctl'
 TAG = 'blocklists'
 PREFIX = 'blocklists_'
 WAIT = 10           # seconds a run waits for another to end, then leaves the cutting to the next minute
+HWDROP = '/usr/local/opnsense/scripts/xgs/hwdrop.py'    # os-xgs-npu's, where it is installed
 
 
 def log(message):
@@ -57,6 +71,197 @@ def log(message):
         subprocess.run(['/usr/bin/logger', '-t', TAG, '-p', 'daemon.notice', message], timeout=10)
     except (OSError, subprocess.SubprocessError):
         pass
+
+
+def hwdrop(path=None):
+    """os-xgs-npu's hwdrop module, loaded from its installed place and not copied; None when it is not
+    there or does not load. Loaded only when a run has something to cut, so after everything this
+    imports: hwdrop puts its own folder first on the module search path to import its flows.py, where a
+    later `import status` would find os-xgs-npu's status.py - the path is put back as it was once it has
+    loaded. Its functions need root, as cron and configd run this."""
+    path = path or HWDROP
+    if not os.path.isfile(path):
+        return None
+    saved = list(sys.path)
+    try:
+        spec = importlib.util.spec_from_file_location('xgs_hwdrop', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except Exception as e:
+        log(f'os-xgs-npu\'s hwdrop.py could not be loaded, nothing dropped in hardware: {e}')
+        return None
+    finally:
+        sys.path[:] = saved
+
+
+HW_DEADLINE = 5             # seconds the hardware step may take; then the pf cut goes on without it
+UNKNOWN = 'unknown'         # how many a hardware step dropped, when it was left at its deadline
+_left = []                  # the hardware steps left at their deadline, while they still run
+
+
+class HardwareLate(Exception):
+    """The hardware step's time is up: raised to within()'s caller at the deadline, and in the step
+    itself at its next `in` test (Until), which ends it there."""
+
+
+class HardwareBusy(HardwareLate):
+    """A hardware step left at its deadline still runs: no second one is started beside it."""
+
+
+class Until:
+    """A collection whose `in` test is `inner`'s until `stop` is set, and raises HardwareLate after.
+    os-xgs-npu's hwdrop asks it once for each connection of the flow table, between two calls of the
+    driver, and lets HardwareLate through: a step left at its deadline writes no verdict after it and
+    ends at its next connection - hwdrop's paging generator closed on the way out, whose `finally`
+    puts the page place it shares with the other readers back to 0 and lets the flow-table lock go."""
+
+    def __init__(self, inner, stop):
+        self.inner, self.stop = inner, stop
+
+    def __contains__(self, item):
+        if self.stop.is_set():
+            raise HardwareLate()
+        return item in self.inner
+
+    def __iter__(self):
+        return iter(self.inner)
+
+    def __len__(self):
+        return len(self.inner)
+
+
+def within(seconds, what, *args):
+    """what(stop, *args) in a thread of its own, waited for `seconds` and no longer: its result, or a
+    RuntimeError with the text of what it raised; HardwareLate at the deadline, `stop` set for it.
+    The thread is a daemon: left at its deadline it ends at its next Until test, at the end of the
+    driver call it is in, or with the process, which it never holds up - and as long as it runs no
+    other is started (HardwareBusy). With the process goes the flow-table lock it may hold (a lock
+    of the open file, which a child does not inherit); a sysctl still running in the driver ends on
+    its own, its parent gone; and the shared page place is left where it was, should the step have
+    been between two pages - os-xgs-npu's readers each write the place before every page they read,
+    so only a walk of the sysctl tree that prints the page sees a page then, until the next reading
+    puts it back to 0.
+
+    Until 2026-11-17 a real-time timer raised HardwareLate in the main thread, and the deadline was
+    not one: the timer fired in hwdrop's paging, whose `finally` ran another sysctl of up to 10 s
+    (4.13 s with a 1 s deadline and 3 s sysctls), and in a sysctl call subprocess.run kills its child
+    on any exception and then waits for it with no limit - one stuck in the driver held the pf cut
+    and this script's lock. A timer that fired as the step returned raised after the call, or left
+    the handler installed."""
+    _left[:] = [t for t in _left if t.is_alive()]
+    if _left:
+        raise HardwareBusy()
+    stop = threading.Event()
+    done = {}
+
+    def step():
+        try:
+            done['value'] = what(stop, *args)
+        except HardwareLate:
+            pass                # stopped at its deadline: the caller has gone on
+        except Exception as e:  # only its text: what it held is let go here, in this thread
+            done['error'] = f'{type(e).__name__}: {e}'
+
+    worker = threading.Thread(target=step, name='blocklists-hwdrop', daemon=True)
+    worker.start()
+    worker.join(seconds)
+    if worker.is_alive():
+        stop.set()
+        _left.append(worker)
+        raise HardwareLate()
+    if 'error' in done:
+        raise RuntimeError(done['error'])
+    return done.get('value')
+
+
+def drop_in_hardware(networks):
+    """Connections with either end in `networks` dropped on the coprocessor, by os-xgs-npu's hwdrop:
+    how many; UNKNOWN when the step was left at its deadline or failed, as some may have been dropped
+    by then (until 2026-11-17 that was said as 0); None without os-xgs-npu. One call, which reads the
+    whole flow table."""
+    hw = hwdrop()
+    if hw is None:
+        return None
+    match = Matcher(networks)
+    try:
+        n = int(within(HW_DEADLINE, lambda stop: hw.drop_addresses(Until(match, stop))) or 0)
+    except HardwareBusy:
+        log('dropping in hardware: a step left at its deadline still runs, none started beside it; '
+            'how many were dropped is not known, the pf cut goes on')
+        return UNKNOWN
+    except HardwareLate:
+        log(f'dropping in hardware took more than {HW_DEADLINE} s: left there, how many were dropped is '
+            'not known, the pf cut goes on')
+        return UNKNOWN
+    except Exception as e:      # it says it never raises; a cut is not stopped by it if it does
+        log(f'dropping in hardware failed, how many were dropped is not known: {e}')
+        return UNKNOWN
+    log(f"{n} connection{'' if n == 1 else 's'} dropped in hardware")
+    return n
+
+
+def release_in_hardware(networks):
+    """Connections with either end in `networks` handed back to the host by os-xgs-npu's hwdrop - the
+    entries no watched list holds any more. A connection dropped on the coprocessor for an address
+    stays dropped there while its sender sends, whatever the lists say after (os-xgs-npu's REMAINING
+    A15, 2026-11-17): handed back, pf decides its frames again. How many; UNKNOWN when the step was
+    left at its deadline or failed - the entries are tried again at the next run; None without
+    os-xgs-npu, or with one older than its release_addresses, which hands nothing back by address."""
+    hw = hwdrop()
+    if hw is None or not hasattr(hw, 'release_addresses'):
+        return None
+    match = Matcher(networks)
+    try:
+        n = int(within(HW_DEADLINE, lambda stop: hw.release_addresses(Until(match, stop))) or 0)
+    except HardwareBusy:
+        log('handing back from hardware: a step left at its deadline still runs, none started beside it; '
+            'tried again at the next run')
+        return UNKNOWN
+    except HardwareLate:
+        log(f'handing back from hardware took more than {HW_DEADLINE} s: left there, tried again at the next run')
+        return UNKNOWN
+    except Exception as e:      # it says it never raises; nothing here is stopped by it if it does
+        log(f'handing back from hardware failed, tried again at the next run: {e}')
+        return UNKNOWN
+    if n:
+        log(f"{n} connection{'' if n == 1 else 's'} handed back from hardware: no list holds their address now")
+    return n
+
+
+def unwatched_entries(watched):
+    """Every entry kept for a list no longer watched - unchosen, the cut setting off for it, or the
+    plugin off - read before forget() deletes what was kept."""
+    keep = {os.path.basename(snapshot_path(name)) for name in watched}
+    out = set()
+    try:
+        names = os.listdir(STATE_DIR)
+    except OSError:
+        return out
+    for entry in names:
+        if entry.startswith(PREFIX) and entry.endswith('.json') and entry not in keep:
+            out |= set(load(os.path.join(STATE_DIR, entry), None) or [])
+    return out
+
+
+def dropped_said(n):
+    """The hardware step's count as the summary's message says it."""
+    if n == UNKNOWN:
+        return 'how many were dropped in hardware now is not known (the system log says why)'
+    return f'{n} dropped in hardware now'
+
+
+def outbound_blocked(path=None):
+    """Whether the lists block outbound too (Direction "Both ways", the default). Under Inbound only the
+    rules let a connection out to a listed address through: dropped on the coprocessor it would stay
+    dead while its sender went on sending (os-xgs-npu keeps a dropped connection there until its
+    frames stop), so nothing is dropped in hardware then - the pf cut goes on as before, and the
+    connection made again is let through."""
+    try:
+        root = ET.parse(path or CONFIG).getroot()
+    except (OSError, ET.ParseError):
+        return True
+    return (root.findtext('OPNsense/BlockLists/general/direction') or 'both') == 'both'
 
 
 def owned(path=FEEDS):
@@ -244,6 +449,11 @@ def run():
         summary['lists'][name] = {'entries': len(now), 'added': len(new), 'cut': 0}
 
     if any(added.values()):
+        # on the coprocessor first, once for every list's new entries, where os-xgs-npu is installed and
+        # outbound is blocked too
+        dropped = drop_in_hardware(set().union(*added.values())) if outbound_blocked() else None
+        if dropped is not None:
+            summary['dropped'] = dropped
         try:
             text = subprocess.run([PFCTL, '-ss', '-vv'], capture_output=True, text=True, timeout=120).stdout
         except (OSError, subprocess.SubprocessError):
@@ -262,6 +472,31 @@ def run():
                     killed.add(sid)
                     summary['lists'][name]['cut'] += 1
         summary['cut'] = len(killed)
+
+    # Entries a watched list has lost since the last run, and every entry of a list no longer watched:
+    # their connections handed back from hardware, unless a watched list still holds the entry - a step
+    # left at its deadline tries again at the next run, and an entry listed again meanwhile is left.
+    lost = set()
+    for name in added:
+        if kept[name] is not None:
+            lost |= kept[name] - current[name]
+    if read:
+        lost |= unwatched_entries(lists)
+    held = set().union(*current.values()) if current else set()
+    pending = (set(load(PENDING, None) or []) | lost) - held
+    if pending:
+        released = release_in_hardware(sorted(pending))
+        if released is not None:
+            summary['released'] = released
+        if released != UNKNOWN:
+            pending = set()
+    if pending:
+        save(PENDING, sorted(pending))
+    elif os.path.exists(PENDING):
+        try:
+            os.unlink(PENDING)
+        except OSError:
+            pass
 
     for name in added:
         # what was compared, not a second reading: an entry added since is new at the next run; and
@@ -290,6 +525,13 @@ def run():
             parts.append(f"{name} ({info['error']})" if 'error' in info else
                          f"{name} ({info['entries']} entries, {info['cut']} cut now, {totals.get(name, 0)} in all)")
         summary['message'] = 'cut when listed: ' + ', '.join(parts)
+        if 'dropped' in summary:
+            summary['message'] += '; ' + dropped_said(summary['dropped'])
+        if summary.get('released') == UNKNOWN:
+            summary['message'] += ('; how many were handed back from hardware now is not known, tried again at '
+                                   'the next run')
+        elif summary.get('released'):
+            summary['message'] += '; %d handed back from hardware now' % summary['released']
     save(STATUS, summary)
     return summary
 

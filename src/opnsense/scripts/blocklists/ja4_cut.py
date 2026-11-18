@@ -37,14 +37,25 @@ for it. Never fails its caller; what it could not do is in the summary and in th
 The log is read a line at a time and only what is looked for is kept (2026-10-29): every TLS line of
 it was held in memory before anything was looked at, so a log of a week of TLS was held whole - by
 --seen at every press of the page's button, and by the search for a fingerprint just listed.
+
+Cut in hardware too (2026-11-16): where os-xgs-npu is installed, its hwdrop.drop_ends() is called
+before the pf states are killed, once a reading with the ends of every state being cut, each state's
+apart and with its protocol, as its own ja4_cut.py does - with XGS: Settings "Cut in hardware" on,
+the coprocessor drops those connections at once, both ways. It returns how many it dropped, 0 with
+the setting off or no driver table, and the count is in the summary and the system log. Without
+os-xgs-npu nothing changes. See hwdrop(). The step has HW_DEADLINE seconds, in a thread of its
+own, and then the pf cut goes on whatever it is doing (within(), since 2026-11-17); its count is
+then "unknown", and so is the run's total.
 """
 import fcntl
+import importlib.util
 import ipaddress
 import json
 import os
 import re
 import subprocess
 import sys
+import threading
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -59,6 +70,7 @@ TAG = 'blocklists-ja4'
 EVERY = 2           # seconds between two readings of the log in --for
 SLACK = 5           # seconds a state may be younger than its log line: Suricata stamps the packet
 SEEN_TAIL = 64 * 1024 * 1024    # bytes of the log --seen reads, back from its end
+HWDROP = '/usr/local/opnsense/scripts/xgs/hwdrop.py'    # os-xgs-npu's, where it is installed
 
 # protocol, TLS version, SNI or not, cipher and extension counts, the ALPN's first and last character;
 # then the two truncated hashes - https://github.com/FoxIO-LLC/ja4. The protocol is t, TLS over TCP,
@@ -72,6 +84,146 @@ def log(message):
         subprocess.run(['/usr/bin/logger', '-t', TAG, '-p', 'daemon.notice', message], timeout=10)
     except (OSError, subprocess.SubprocessError):
         pass
+
+
+_hwdrop = {}
+
+
+def hwdrop(path=None):
+    """os-xgs-npu's hwdrop module, loaded from its installed place and not copied, once a process; None
+    when it is not there or does not load. Loaded only when a reading has something to cut, so after
+    everything this imports: hwdrop puts its own folder first on the module search path to import its
+    flows.py, where a later `import status` would find os-xgs-npu's status.py - the path is put back as
+    it was once it has loaded. Its functions need root, as cron and configd run this."""
+    path = path or HWDROP
+    if path in _hwdrop:
+        return _hwdrop[path]
+    module = None
+    if os.path.isfile(path):
+        saved = list(sys.path)
+        try:
+            spec = importlib.util.spec_from_file_location('xgs_hwdrop', path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+        except Exception as e:
+            log(f'os-xgs-npu\'s hwdrop.py could not be loaded, nothing dropped in hardware: {e}')
+            module = None
+        finally:
+            sys.path[:] = saved
+    _hwdrop[path] = module
+    return module
+
+
+HW_DEADLINE = 5             # seconds the hardware step may take; then the pf cut goes on without it
+UNKNOWN = 'unknown'         # how many a hardware step dropped, when it was left at its deadline
+_left = []                  # the hardware steps left at their deadline, while they still run
+
+
+class HardwareLate(Exception):
+    """The hardware step's time is up: raised to within()'s caller at the deadline, and in the step
+    itself at its next `in` test (Until), which ends it there."""
+
+
+class HardwareBusy(HardwareLate):
+    """A hardware step left at its deadline still runs: no second one is started beside it."""
+
+
+class Until:
+    """A collection whose `in` test is `inner`'s until `stop` is set, and raises HardwareLate after.
+    os-xgs-npu's hwdrop asks it once for each connection of the flow table, between two calls of the
+    driver, and lets HardwareLate through: a step left at its deadline writes no verdict after it and
+    ends at its next connection - hwdrop's paging generator closed on the way out, whose `finally`
+    puts the page place it shares with the other readers back to 0 and lets the flow-table lock go."""
+
+    def __init__(self, inner, stop):
+        self.inner, self.stop = inner, stop
+
+    def __contains__(self, item):
+        if self.stop.is_set():
+            raise HardwareLate()
+        return item in self.inner
+
+    def __iter__(self):
+        return iter(self.inner)
+
+    def __len__(self):
+        return len(self.inner)
+
+
+def within(seconds, what, *args):
+    """what(stop, *args) in a thread of its own, waited for `seconds` and no longer: its result, or a
+    RuntimeError with the text of what it raised; HardwareLate at the deadline, `stop` set for it.
+    The thread is a daemon: left at its deadline it ends at its next Until test, at the end of the
+    driver call it is in, or with the process, which it never holds up - and as long as it runs no
+    other is started (HardwareBusy), so a reading of --for's minute never adds a second one beside
+    it. With the process goes the flow-table lock it may hold (a lock of the open file, which a child
+    does not inherit); a sysctl still running in the driver ends on its own, its parent gone; and the
+    shared page place is left where it was, should the step have been between two pages - os-xgs-npu's
+    readers each write the place before every page they read, so only a walk of the sysctl tree that
+    prints the page sees a page then, until the next reading puts it back to 0.
+
+    Until 2026-11-17 a real-time timer raised HardwareLate in the main thread, and the deadline was
+    not one: the timer fired in hwdrop's paging, whose `finally` ran another sysctl of up to 10 s, and
+    in a sysctl call subprocess.run kills its child on any exception and then waits for it with no
+    limit - one stuck in the driver held the pf cut and this script's lock. A timer that fired as the
+    step returned raised after the call, or left the handler installed."""
+    _left[:] = [t for t in _left if t.is_alive()]
+    if _left:
+        raise HardwareBusy()
+    stop = threading.Event()
+    done = {}
+
+    def step():
+        try:
+            done['value'] = what(stop, *args)
+        except HardwareLate:
+            pass                # stopped at its deadline: the caller has gone on
+        except Exception as e:  # only its text: what it held is let go here, in this thread
+            done['error'] = f'{type(e).__name__}: {e}'
+
+    worker = threading.Thread(target=step, name='blocklists-hwdrop', daemon=True)
+    worker.start()
+    worker.join(seconds)
+    if worker.is_alive():
+        stop.set()
+        _left.append(worker)
+        raise HardwareLate()
+    if 'error' in done:
+        raise RuntimeError(done['error'])
+    return done.get('value')
+
+
+def drop_in_hardware(groups):
+    """Connections both of whose ends are in one group - (protocol, ends) of one state being cut -
+    dropped on the coprocessor, by os-xgs-npu's hwdrop: how many; UNKNOWN when the step was left at
+    its deadline or failed, as some may have been dropped by then (until 2026-11-17 that was said as
+    0); None without os-xgs-npu. One call, which reads the whole flow table."""
+    hw = hwdrop()
+    if hw is None:
+        return None
+    try:
+        n = int(within(HW_DEADLINE, lambda stop: hw.drop_ends([(proto, Until(ends, stop))
+                                                              for proto, ends in groups])) or 0)
+    except HardwareBusy:
+        log('dropping in hardware: a step left at its deadline still runs, none started beside it; '
+            'how many were dropped is not known, the pf cut goes on')
+        return UNKNOWN
+    except HardwareLate:
+        log(f'dropping in hardware took more than {HW_DEADLINE} s: left there, how many were dropped is '
+            'not known, the pf cut goes on')
+        return UNKNOWN
+    except Exception as e:      # it says it never raises; a cut is not stopped by it if it does
+        log(f'dropping in hardware failed, how many were dropped is not known: {e}')
+        return UNKNOWN
+    log(f"{n} connection{'' if n == 1 else 's'} dropped in hardware")
+    return n
+
+
+def dropped_said(n):
+    """The hardware step's count as the summary's message says it."""
+    if n == UNKNOWN:
+        return 'how many were dropped in hardware now is not known (the system log says why)'
+    return f'{n} dropped in hardware now'
 
 
 def settings():
@@ -279,7 +431,14 @@ class Watch:
             log(f"{len(matched)} connection{'' if len(matched) == 1 else 's'} with a listed fingerprint "
                 "not cut: pfctl -ss could not be read")
             return summary
-        cuts = to_cut(matched, states(text), time.time())
+        all_states = states(text)
+        cuts = to_cut(matched, all_states, time.time())
+        # on the coprocessor first, where os-xgs-npu is installed: each state's ends apart, with its
+        # protocol, as os-xgs-npu's ja4_cut.py gives them
+        groups = [(proto, ends) for sid, proto, ends, _age, _over in all_states if sid in cuts]
+        dropped = drop_in_hardware(groups) if groups else None
+        if dropped is not None:
+            summary['dropped'] = dropped
         per_conn = {}
         totals = st.setdefault('totals', {})
         for sid, ev in cuts.items():
@@ -307,6 +466,8 @@ class Watch:
             text = (f"{n} fingerprint{'' if n == 1 else 's'} listed, "
                     f"{summary.get('connections', 0)} connection{'' if summary.get('connections', 0) == 1 else 's'} cut now, "
                     f"{sum(self.status.get('totals', {}).get(f, 0) for f in self.listed)} in all")
+        if 'dropped' in summary:
+            text += '; ' + dropped_said(summary['dropped'])
         if self.listed and self.problem:
             text += ' - ' + self.problem
         if self.bad:
@@ -369,10 +530,15 @@ def main(argv):
         w = Watch()
         until = time.monotonic() + seconds
         cut = conns = 0
+        dropped = None
         while True:
             summary = w.once()
             cut += summary['cut']
             conns += summary.get('connections', 0)
+            if 'dropped' in summary:
+                # one reading's count not known, the minute's is not either
+                known = UNKNOWN not in (dropped, summary['dropped'])
+                dropped = (dropped or 0) + summary['dropped'] if known else UNKNOWN
             # Off, or the IDS not logging JA4: the next minute's run looks again. Nothing listed is no
             # reason to stop (2026-10-29): the minute's watch stopped then, and a fingerprint listed
             # during the minute waited for the next one - the page's own run found the lock free but
@@ -383,6 +549,8 @@ def main(argv):
                 break
             time.sleep(EVERY)
         summary['cut'], summary['connections'] = cut, conns
+        if dropped is not None:
+            summary['dropped'] = dropped
         summary['message'] = w.message(summary)
         w.status['last'] = summary
         w.save()

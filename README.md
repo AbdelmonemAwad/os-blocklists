@@ -19,7 +19,7 @@
 
 # Block Lists for OPNsense
 
-Block lists in one place: addresses, DNS names, countries and JA4 fingerprints of TLS clients, gathered into one page - and on a Sophos XGS ~~cut by the coprocessor in hardware~~ a cut connection taken out of the coprocessor with its state (the coprocessor holds no address list of its own to block by - os-xgs-npu's hardware-drop research, issue 519).
+Block lists in one place: addresses, DNS names, countries and JA4 fingerprints of TLS clients, gathered into one page - and on a Sophos XGS ~~cut by the coprocessor in hardware~~ a cut connection dropped on the coprocessor at once where os-xgs-npu's "Cut in hardware" is on and outbound is blocked too, and else taken out of it with its state (the coprocessor holds no address list of its own to block by - os-xgs-npu's hardware-drop research, issue 519).
 
 > ~~**Planned - nothing here runs yet.** This repository was opened on 2026-10-22 to hold
 > Block Lists as a plugin of its own. No code has been written or moved into it, and there is no
@@ -47,16 +47,116 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
 - **address lists** - chosen from a short catalogue of public feeds (`feeds.json`), each answered
   `200` and read as addresses on 2026-10-22: Spamhaus DROP (IPv4 and IPv6), abuse.ch Feodo Tracker,
   Emerging Threats compromised hosts, CINS Army, blocklist.de. Each becomes a URL Table alias of its
-  own, `blocklists_<id>`, fetched by OPNsense once a day, with counters on;
+  own, `blocklists_<id>`, with counters on, fetched by OPNsense again every two hours by default
+  (below). And since 2026-11-17 ThreatFox's command-and-control addresses, which the plugin fetches
+  itself with an abuse.ch Auth-Key of the owner's (**ThreatFox**, below);
+- **how often the lists are fetched** - "Fetch the lists": every 2 hours (the default), 6, 12 or 24,
+  and for each list no more often than the floor kept for it in `feeds.json` (`min_hours`):
+  Spamhaus DROP and DROPv6 once a day (Spamhaus's DROP FAQ); Feodo Tracker every 15 minutes at the
+  most, a floor of this plugin's own (abuse.ch generates it every 5 and recommends fetching it at
+  least every 15: no limit of its own); blocklist.de every 30 minutes at the most (it is generated
+  that often); Emerging Threats and CINS Army, which publish no rule, once a day. So with the default, Feodo Tracker and
+  blocklist.de are fetched every two hours and the others once a day. The longer of the two is written into the alias's `updatefreq`, in
+  days with a fraction as OPNsense 26.7 takes it (0.083333 for two hours; OPNsense's alias updater
+  checks every minute and takes anything under a second for never, which nothing here comes near).
+  A list is fetched at once, whatever its floor, when its alias is made again: the list chosen
+  again, or the plugin or the alias switched off and on. Until 2026-11-16 every list was fetched
+  once a day; an alias made before takes the new frequency at the plugin's next Apply, which writes
+  it into every alias it owns, and at every install or update of the plugin - by a package, XGS:
+  Updates, the self-update or `install/install.sh` by hand: both installers run
+  `fetch-frequency.php`, which sets the `updatefreq` of each alias of the plugin's own lists that is
+  switched on and a URL table, where it is not what the settings say, and changes nothing else - no
+  alias added, removed, switched on or off, nothing else of one rewritten; the countries' alias, one
+  switched off and the owner's own are left as they are. config.xml is saved only when one changed,
+  and what it did is in the system log (`blocklists`) and the installer's output (until 2026-11-17 a
+  package ran the whole Apply instead, its output thrown away, and an update from XGS: Updates ran
+  nothing). ThreatFox's list is no URL table, and none of this is its: it keeps abuse.ch's pace (next);
+- **ThreatFox, with an abuse.ch Auth-Key** (since 2026-11-17) - "ThreatFox: command-and-control
+  addresses" in Address lists: the command-and-control servers of malware that abuse.ch's ThreatFox
+  holds, those of the last six months (it expires older ones), as addresses. Since 2025-06-30 abuse.ch
+  serves ThreatFox's exports only with an Auth-Key of the user's own, from a free account at
+  auth.abuse.ch (in its profile, under Optional); it goes in the setting **abuse.ch Auth-Key**.
+  Without a key the list is not made - Apply says so - and nothing is fetched; Feodo Tracker is as it
+  was. No URL table can fetch it (the key in the address, a zipped CSV, `ip:port` entries), so the
+  plugin's `threatfox.py` does, into an external alias, `blocklists_threatfox` (OPNsense's "External
+  (advanced)": OPNsense declares its table and leaves its addresses to the script, which puts the
+  list into it with `pfctl -T replace -f -`, the list on stdin, whenever the table does not hold it -
+  after a reboot too, without a fetch). It is marked `"c2"`, so it has the "from inside" rule below
+  and os-netreport's alert as Feodo Tracker has.
+  - *What is taken*: of an export, the indicators of type `ip:port` with the threat `botnet_cc` only,
+    as addresses, IPv4 and IPv6, each once. A line that is not one is dropped, and so is an address
+    no server on the internet has - private, shared (100.64/10), loopback, link-local, multicast,
+    reserved, unspecified, IPv4-mapped, unique local - which blocked both ways could cut the firewall
+    off its own networks. The confidence ThreatFox gives an indicator is not looked at.
+  - *What is sent to abuse.ch*: the key, in the address of each download -
+    `https://threatfox-api.abuse.ch/v2/files/exports/<key>/full.csv.zip` and `.../recent.csv`, as
+    abuse.ch's export page asks - over HTTPS with the server's certificate checked, and a User-Agent
+    of `os-blocklists`; abuse.ch sees the request come from the firewall's public address, as any
+    server does. Nothing else: no address of its networks, no log, no count, no setting.
+  - *Where the key is*: in config.xml - and so in its backups and in System: Configuration: History,
+    as the other secrets OPNsense keeps are - and nowhere else: not on the page, whose field says only
+    "saved" or "not set" (the settings' answer has it empty: OPNsense's write-only field), not in the
+    system log, the script's answer or its files, not on a command line or in a configd parameter. A
+    text that would carry it, an error naming the address, has it taken out first. An empty field
+    keeps the key; **Remove the key**, beside it, takes it out of config.xml, and Apply then removes
+    the list.
+  - *Its pace, and why*: abuse.ch's Terms of Use give no number - export volumes as reasonably
+    expected for non-commercial or non-profit purposes, and no high-volume automatic harvesting - but
+    its API changelog of 2026-11-12 does for each export whose name holds "full": up to four times its
+    size per account and UTC day, partial and cancelled downloads counted, then 429 until 00:00 UTC;
+    and it asks for each full export once a day and the matching recent export for the updates in
+    between. So the whole export, `full.csv.zip`, is fetched once a day - 24 hours after the last one
+    fetched, and no more than twice begun in a UTC day, a download that broke off included: half of
+    abuse.ch's cap, which is the account's, shared by every firewall and tool that uses it. The recent
+    additions, `recent.csv`, are fetched as often as "Fetch the lists" says - every two hours by
+    default - and never more often than once an hour (`min_hours` in `feeds.json`); the whole export
+    takes the place of the recent additions fetched before it. A fetch that failed waits as long
+    before its next try; one answered 429 waits for the time abuse.ch gives (`Retry-After`; 00:00 UTC
+    without one); after a refused key (401, 403) nothing is sent for a day, or until the next Apply,
+    which tries again at once, for a key just replaced. A cron entry runs the script every five
+    minutes, and it fetches only what is due; the page's Apply runs it too, in the background.
+  - *On a failure* - a download that fails or breaks off, an answer that is not an export, a whole
+    export with no command-and-control address in it - the last good list is kept, in pf and in
+    `/var/db/os-blocklists/threatfox`. The Lists tab's "ThreatFox:" line says what the list holds and
+    from when, and what failed last.
+  - *Commercial use*: abuse.ch's Terms of Use say that companies and others with commercial needs
+    may need a paid subscription for ThreatFox; that is between the owner of the key and abuse.ch.
 - **countries** - one GeoIP alias, `blocklists_countries` (it needs a GeoIP source in Firewall:
   Aliases);
 - **the block rules** - registered by the plugin at every filter reload (`plugins.inc.d/blocklists.inc`,
   as os-crowdsec does): inbound from a listed address, and by default outbound to one, on every
   interface, before the interface rules. They are never added to the owner's own rules, so turning
   the plugin off or removing it leaves nothing there;
+- **a device reaching a command-and-control list, logged by its own address** - a list marked
+  `"c2": true` in `feeds.json` (Feodo Tracker and ThreatFox) gets one more rule while outbound is blocked
+  (Both ways): `block in log quick` from any to `<blocklists_<id>>`, on the inside interfaces -
+  those with an address of their own (a static IPv4 address, or IPv6 static, tracked or by identity
+  association) that no gateway names (none in System: Gateways, switched off or not, IPv4 or IPv6,
+  and none chosen in the interface's own gateway rules), that take no address from outside (DHCP,
+  PPPoE, PPTP, L2TP, PPP, DHCPv6, SLAAC, 6rd, 6to4, PPPoEv6, lease or not) and are not virtual (the
+  loopback, a VPN or interface group; one left out is under [Not yet, and why](#not-yet-and-why)) -
+  described `Block Lists: blocklists_<id> from inside`, logged whatever "Log blocked packets" says,
+  and before the list's other rules (all are priority 1, and OPNsense 26.7 writes one priority's
+  rules in the order they were registered). It is never on a WAN, so nothing that comes in from the
+  internet is blocked or logged by it. On an inside interface it comes before every other rule, the
+  anti-lockout rule too (priority 5: the GUI, and SSH where it is on, passed to the firewall from the
+  LAN): should the firewall's own public address be on the list - an address that served a command
+  server once and was handed on - a device inside that reaches that address, the GUI opened by the
+  firewall's public name or a port forward through NAT reflection, is blocked and logged as from
+  inside as well; the GUI is still reached by the firewall's inside address. pf has no one rule for
+  "to the list but not to this firewall", so that case is left as it is. Why the rule: the outbound
+  rule matches where a packet leaves the firewall, after outbound NAT, so behind NAT its log line
+  names the firewall's WAN address, never the device (seen on an XGS 3300, 2026-11-16); this one
+  matches where the packet comes in from the LAN, before NAT, and its line carries the device's own
+  address - os-netreport's command-and-control alert reads it by that description. It writes one
+  line to the filter log for every packet it blocks, about 220 bytes (270 for TCP), and keeps no
+  state, so an infected device that retries all day grows the log
+  by that much each try: at one try a second about 23 MB a day, kept 31 days by OPNsense's default;
 - **open connections cut** - a block rule stops new connections only; with "Cut open connections"
   on, a connection already open to or from an address a list has just gained is cut within a
-  minute (`cut.py`), and on a Sophos XGS taken out of the coprocessor with its state;
+  minute (`cut.py`), and on a Sophos XGS taken out of the coprocessor with its state - or, where
+  os-xgs-npu is installed with its "Cut in hardware" on and the lists block outbound too (Both
+  ways), dropped on the coprocessor first (below);
 - **JA4** - TLS connections whose client shows a listed fingerprint are cut, read from the
   Intrusion Detection's TLS log every two seconds (`ja4_cut.py`); the page lists the fingerprints
   seen, to find the one to list (those in the log's last 64 MB, since 2026-10-29);
@@ -82,6 +182,36 @@ which has not been changed: they still run where it is installed, for the lists 
 XGS: Settings names. Here, a list or a fingerprint named there is left to os-xgs-npu, so nothing is
 cut twice; everything else is this plugin's.
 
+**Cut in hardware too** (since 2026-11-16). Where os-xgs-npu is installed
+(`/usr/local/opnsense/scripts/xgs/hwdrop.py` is there), `cut.py` and `ja4_cut.py` call its hardware
+drop before they kill the pf states, as its own `lists_cut.py` and `ja4_cut.py` do: `cut.py` once a
+run with every list's new entries (`hwdrop.drop_addresses`), `ja4_cut.py` once a reading with each
+cut state's ends and protocol (`hwdrop.drop_ends`). With XGS: Settings "Cut in hardware" on, the
+coprocessor drops those connections at once, both ways, and keeps them dropped while their senders
+go on sending (they leave it about 20 seconds after their frames stop, as os-xgs-npu measured); off,
+or with no driver table, it drops nothing and says 0. `cut.py` drops in hardware only while the lists
+block outbound too (Both ways): under Inbound only the rules let such a connection out, and it would
+stay dead on the coprocessor - its pf state is killed as before, and the connection made again goes
+through. A connection dropped there is handed back to the host when its address leaves every watched
+list - an entry a list loses, a list unchosen or no longer watched, the plugin turned off - by
+`hwdrop.release_addresses` (os-xgs-npu since 2026-11-17), at the next run of `cut.py`; pf then decides
+its frames again. An entry another watched list still holds is left as it is, and a hand-back left at
+its deadline is tried again at the next run. With an os-xgs-npu older than that, it is not handed back
+by address: it ends when its sender stops, or is handed back on XGS: Offloaded Flows. The hardware
+step has 5 seconds, and they are a hard limit (since 2026-11-17): it
+runs in a thread of its own, and at 5 seconds the pf cut goes on whatever the step is doing. The step
+is told to stop and ends at the next connection it looks at, writing no verdict after that - or, if
+a call into the driver never returns, with the process. How many it dropped is then not known, and
+the summary, the message and the system log say "unknown". The flow-table lock it may hold goes
+with the process; the page place it shares with os-xgs-npu's other readers is put back by the step
+as it ends, or, if the process ends first, stays until the next reading puts it back. While a step
+left at its deadline still runs, no second one is started beside it (`ja4_cut.py` reads every two
+seconds). Before, a real-time timer stopped the step, and the pf cut could wait well past the 5
+seconds for a driver call to end. The module is loaded from os-xgs-npu's place, not copied, and only
+when there is something to cut; the count is in the summary, the page's "Open connections" line (for
+`ja4_cut.py`, the JA4 tab's "Last run" line) and the system log (`N connections dropped in
+hardware`). Without os-xgs-npu nothing changes.
+
 ## Not yet, and why
 
 - **a QUIC or DTLS client's JA4** - only a TLS client over TCP (`t...`) is cut: `ja4_cut.py` reads
@@ -98,12 +228,25 @@ cut twice; everything else is this plugin's.
   Intrusion Detection already logs JA4, it is watched within two seconds - since 2026-10-29 the watch
   goes on through the minute with nothing listed; before, a fingerprint listed during the minute waited
   for the next one. Not yet tested.
+- **a LAN with a router behind it has no "from inside" rule** - an interface a gateway is on is not
+  taken for inside, so a LAN whose router to further inside networks is a gateway in System:
+  Gateways is left out too. OPNsense 26.7's "Upstream Gateway" mark cannot tell that router from a
+  WAN's gateway: it is off unless ticked, a WAN on DHCP never has it, and a gateway without it still
+  becomes the default route when no marked one is up. The test is this wide because the narrower one
+  before it, the filter's own gateway for each interface, took a WAN for inside until 2026-11-17 -
+  one whose gateway rules are Disabled, whose gateway is switched off or left to auto-detect, or one
+  on DHCP without its lease and with a static IPv6 address - and the rule then blocked what came in
+  on it to the firewall's own address, were that address listed. That LAN's devices are still
+  blocked by the outbound rule; they are logged only as "Log blocked packets" says, and behind NAT by
+  the firewall's WAN address.
 - **the aliases outlive the plugin** - removed, it leaves them in Firewall: Aliases, blocking nothing,
   and OPNsense goes on fetching their lists; turn Enabled off and Apply before removing it
   ([Installation](#installation)).
 - **no list is dropped in an XGS's hardware** - the coprocessor holds no address list of its own to
   block by (os-xgs-npu's hardware-drop research, issue 519); a cut connection is taken out of the
-  coprocessor with its state.
+  coprocessor with its state, and with os-xgs-npu's "Cut in hardware" on and outbound blocked too
+  (Both ways) it is dropped there first ([Beside os-xgs-npu](#beside-os-xgs-npu)) - a connection,
+  not the list.
 
 ## What is tested
 
@@ -185,6 +328,35 @@ second machine's connections:
   Apply's own answer just after the listing still read `cut by TLS fingerprint: no fingerprint
   listed`.
 
+On the second XGS 3300 on 2026-11-16 (22:00-22:12 UTC), Feodo Tracker chosen with its log on and the
+general logging off: the inside rule first among the plugin's and logged; a connection from the XGS
+136 behind it to a test address put into Feodo's table blocked where it came in, the line naming the
+136's own address, not the WAN's; os-netreport's alert and its infected.json entry from it. That day
+Feodo Tracker held one address (phase 0's reading), so the rule rarely fires. The rule was floating
+then; on the inside interfaces only (none a gateway is on, none on DHCP or the like, none virtual),
+the hardware drop's Inbound only and deadline, and the fetch frequency written at an install or
+update (`fetch-frequency.php`), are to be run on a firewall before this is merged.
+
+Its table drives os-netreport's alert and os-portguard's isolation: OPNsense fetches an alias's URL
+without checking the server's certificate unless "Check certificate of aliases URLs" is on
+(Firewall: Settings: Advanced), and takes any answer of the server's as the list - turn it on where a
+command-and-control list is chosen. ThreatFox's list is fetched by the plugin itself, the server's
+certificate always checked, and an answer that is not an export is never taken for one.
+
+ThreatFox (2026-11-17) is tested by the checks only - not on a firewall, and not against abuse.ch,
+which needs a real key. `tools/test-threatfox.py` reads a recorded sample of ThreatFox's CSV export,
+made up from documentation addresses, and runs `threatfox.py` with stand-ins for abuse.ch's server,
+pfctl and the system log: the export read zipped or not, by the line naming its columns or by their
+places; abuse.ch's pace over two days; 401, 403 and 429, an empty or broken file, a download cut off,
+too large or too slow, pfctl refusing the list - the last list kept; the key unset, the list not
+chosen, its alias missing - nothing sent; a reboot - the table filled again without a fetch; the key in
+no answer, file or log line. `tools/test-threatfox.php` runs apply.php's alias and Remove the key with
+OPNsense's classes stood in for, `tools/test-status.py` the page's line and the key's field, and
+`tools/test-rules.php` its rules. Each part was undone or broken in a copy of the tree, and a test
+failed for each (71 mutations). To be run on a firewall before this is merged: the page and its key
+field, a real key, the two exports' names and layout as abuse.ch serves them, the answer to a refused
+key, and the table and the inside rule with ThreatFox's addresses.
+
 Still not tested: the snapshot written only when its table changed, the log read a line at a time,
 the field refusing all but `t` fingerprints, the checks before the copy, and the removal.
 
@@ -203,11 +375,12 @@ the PHP and the rules hook with `php -l` and the Python with `py_compile`,~~ che
 rules hook with `php -l` and the Python with `py_compile` before anything is copied (since
 2026-10-29: checked after the copy, a hook with an error stayed where every filter reload includes
 it), then copies `src/` onto `/usr/local` (the rules hook and the cron entry for the cuts with it),
-puts the page in the menu (`place-menu.sh`: XGS with os-xgs-npu, Firewall without) and records the
+puts the page in the menu (`place-menu.sh`: XGS with os-xgs-npu, Firewall without), writes the
+fetch frequency into the plugin's aliases already there (`fetch-frequency.php`, above) and records the
 commit for the self-update. Safe to run again: the settings in config.xml are kept. Nothing is
 blocked until lists are chosen on the page and applied. `sh install/uninstall.sh` removes the plugin
 and its rules; the `blocklists_*` aliases stay in Firewall: Aliases, blocking nothing, and OPNsense
-goes on fetching their lists once a day.
+goes on fetching their lists as often as they last said.
 
 **Before removing it**, turn **Enabled** off and **Apply** to take the aliases away as well: the
 Apply removes each alias of the plugin's that nothing else names (one that a rule of the owner's

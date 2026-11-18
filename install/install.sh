@@ -34,7 +34,7 @@ rm -rf /usr/local/opnsense/scripts/blocklists/release-keys
 cp -R "${HERE}/src/" /usr/local/
 chmod 644 /usr/local/opnsense/scripts/blocklists/release-keys/*.pub
 chmod 755 /usr/local/opnsense/scripts/blocklists/*.py /usr/local/opnsense/scripts/blocklists/apply.php \
-    /usr/local/opnsense/scripts/blocklists/place-menu.sh
+    /usr/local/opnsense/scripts/blocklists/fetch-frequency.php /usr/local/opnsense/scripts/blocklists/place-menu.sh
 chmod 644 /usr/local/opnsense/scripts/blocklists/feeds.json /usr/local/opnsense/scripts/blocklists/i18n/ui/source.json
 chmod 644 /usr/local/etc/cron.d/blocklists /usr/local/etc/inc/plugins.inc.d/blocklists.inc
 chmod 644 /usr/local/opnsense/service/conf/actions.d/actions_blocklists.conf
@@ -50,6 +50,13 @@ service configd restart > /dev/null
 # PHP keeps them in its own temporary directory on 26.7 (/var/lib/php/tmp); /tmp is where they were
 rm -f /var/lib/php/tmp/opnsense_menu_cache.xml /var/lib/php/tmp/opnsense_acl_cache.json \
     /tmp/opnsense_menu_cache.xml /tmp/opnsense_acl_cache.json
+# The fetch frequency the settings say, written into the plugin's own aliases already there - the step
+# pkg/post-install.sh runs, so an update by XGS: Updates or the self-update, which run this script,
+# takes it too (until 2026-11-17 only a package's did, and an XGS updated from XGS: Updates kept every
+# list on the daily fetch until someone pressed Apply). fetch-frequency.php changes the updatefreq of
+# those switched on and nothing else, and says what it did here and in the system log (blocklists).
+# Before the filter reload, which hands the aliases' settings to OPNsense's alias updater.
+/usr/local/opnsense/scripts/blocklists/fetch-frequency.php || true
 configctl filter reload > /dev/null 2>&1 || true
 
 # What this install is, for the self-update: the commit, from a git checkout, or from the

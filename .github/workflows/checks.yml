@@ -39,6 +39,43 @@ jobs:
       - name: self-update.py takes a release only as signed
         run: python3 tools/test-self-update.py
 
+  rules:
+    name: rules and cuts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The rule set plugins.inc.d/blocklists.inc registers, with stand-ins for OPNsense's classes:
+      # a command-and-control list's "from inside" rule, its description, its place, its log.
+      - name: The rules hook registers what it should
+        run: php tools/test-rules.php
+
+      # How often each feed is fetched: the page's choice or the floor feeds.json keeps for it, the
+      # longer; and the install's and update's step, which writes that into the aliases and nothing else.
+      - name: Each list fetched as often as chosen, never under its floor
+        run: php tools/test-refresh.php
+
+      # cut.py and ja4_cut.py with a stand-in for os-xgs-npu's hwdrop.py: called once, before the
+      # pf states are killed, and nothing changed without it; its deadline a hard one.
+      - name: The cuts drop in hardware where os-xgs-npu is
+        run: python3 tools/test-hwdrop.py
+
+      # status.py's "inside" for each list, read from the rules pf was given, and the Lists tab's
+      # note on "Blocked in", shown only where a "from inside" rule is.
+      - name: The page says what the rules count
+        run: python3 tools/test-status.py
+
+      # ThreatFox's command-and-control list, fetched with the owner's abuse.ch Auth-Key: a recorded
+      # sample of its export read, abuse.ch's pace kept, the last good list kept on a failure, pf's
+      # table filled - and the key sent to abuse.ch only, never in an answer, a file or the log.
+      - name: ThreatFox fetched as abuse.ch allows, its key kept to itself
+        run: python3 tools/test-threatfox.py
+
+      # apply.php's external alias for it, made only while a key is saved, the key read as OPNsense's
+      # write-only field gives it.
+      - name: ThreatFox's alias made only with a key
+        run: php tools/test-threatfox.php
+
   syntax:
     name: syntax
     runs-on: ubuntu-latest

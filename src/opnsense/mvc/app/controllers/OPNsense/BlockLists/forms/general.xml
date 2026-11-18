@@ -13,7 +13,19 @@
         <id>blocklists.general.feeds</id>
         <label>Address lists</label>
         <type>select_multiple</type>
-        <help>Public lists of addresses to block, each fetched by the firewall once a day into an alias of its own (blocklists_...). The Lists tab says what each one is and whose terms it comes under.</help>
+        <help>Public lists of addresses to block, each fetched by the firewall into an alias of its own (blocklists_...), as often as Fetch the lists says. ThreatFox: command-and-control addresses is fetched only with an abuse.ch Auth-Key, the next setting. The Lists tab says what each one is and whose terms it comes under.</help>
+    </field>
+    <field>
+        <id>blocklists.general.threatfox_key</id>
+        <label>abuse.ch Auth-Key</label>
+        <type>password</type>
+        <help>For the list ThreatFox: command-and-control addresses, in Address lists: abuse.ch serves it only with the Auth-Key of an abuse.ch account, free at auth.abuse.ch (in its profile, under Optional). The firewall sends the key to abuse.ch in the address of each download, over HTTPS with the server's certificate checked, as abuse.ch asks, and nothing else of its own - no address of its networks, no log, no setting; abuse.ch sees the request come from its public address, as any server does. The key is kept in the configuration and never shown on this page again: the field says whether one is saved; leave it empty to keep the key, or take it out with Remove the key. ThreatFox's whole export is fetched once a day, as abuse.ch asks, and its recent additions as often as Fetch the lists says. For commercial use abuse.ch may ask for a paid subscription.</help>
+    </field>
+    <field>
+        <id>blocklists.general.refresh</id>
+        <label>Fetch the lists</label>
+        <type>dropdown</type>
+        <help>How often the firewall fetches each address list again. Each list keeps a floor of its own: Spamhaus DROP once a day, as Spamhaus asks, and Emerging Threats and CINS Army, which publish no rule, once a day too. A list is fetched at once, whatever its floor, when its alias is made again: the list chosen again, or the plugin or the alias switched off and on. ThreatFox is fetched by the plugin itself, as abuse.ch asks: its whole export once a day, whatever this says, and its recent additions as often as this says, an hour apart at the least. A change reaches the lists at the next Apply, and at the plugin's update.</help>
     </field>
     <field>
         <id>blocklists.general.countries</id>
@@ -31,13 +43,13 @@
         <id>blocklists.general.log</id>
         <label>Log blocked packets</label>
         <type>checkbox</type>
-        <help>Write every packet the rules block to the firewall log. A long list blocks a lot.</help>
+        <help>Write every packet the rules block to the firewall log. A long list blocks a lot. With Both ways, a device trying to reach a command-and-control list (Feodo Tracker, ThreatFox) is logged whatever this says, by its own address, so it can be found - where it comes in on an inside interface: one with an address of its own, not taken by DHCP, PPPoE or the like, and no gateway on it. Elsewhere (a VPN group, or a LAN with a router behind it set as a gateway) it is blocked all the same, and logged only as this says.</help>
     </field>
     <field>
         <id>blocklists.general.cut</id>
         <label>Cut open connections</label>
         <type>checkbox</type>
-        <help>A block rule stops new connections only. With this on, a connection already open to or from an address a list has just gained is cut within a minute, and on a Sophos XGS taken out of the coprocessor with it.</help>
+        <help>A block rule stops new connections only. With this on, a connection already open to or from an address a list has just gained is cut within a minute. On a Sophos XGS with os-xgs-npu's Cut in hardware on, and outbound blocked too, it is also dropped on the coprocessor at once, and kept dropped there while its sender goes on sending: an address that leaves a list does not hand it back (XGS: Offloaded Flows does).</help>
     </field>
     <field>
         <id>blocklists.general.ja4</id>

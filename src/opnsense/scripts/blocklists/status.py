@@ -6,7 +6,8 @@
 """
 What the page shows, as one JSON object: each list this plugin owns with its entries and what its
 rules blocked, the countries, the DNS block lists OPNsense's Unbound has, the cutting of open
-connections and of JA4 fingerprints, and what os-xgs-npu does beside it where it is installed.
+connections and of JA4 fingerprints, ThreatFox's fetch and whether an abuse.ch Auth-Key is saved (never
+the key), and what os-xgs-npu does beside it where it is installed.
 
     status.py
 
@@ -26,10 +27,15 @@ import ja4_cut                                                           # noqa:
 
 CONFIG = '/conf/config.xml'
 PFCTL = '/sbin/pfctl'
+RULES = '/tmp/rules.debug'          # the rules the last filter reload gave pf (filter.inc)
 PREFIX = 'blocklists_'
+# a "from inside" rule's line there, as OPNsense writes it: `block in log quick on igb1 inet from {any}
+# to {<blocklists_feodo>} label "..." # Block Lists: blocklists_feodo from inside`
+INSIDE = re.compile(r'# Block Lists: (' + PREFIX + r'\S+) from inside\s*$')
 FEEDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'feeds.json')
 CUT_STATUS = '/var/db/os-blocklists/cut/status.json'
 JA4_STATUS = '/var/db/os-blocklists/ja4/status.json'
+THREATFOX_STATUS = '/var/db/os-blocklists/threatfox/status.json'     # threatfox.py's
 PROJECT_CUT = '/usr/local/opnsense/scripts/xgs/lists_cut.py'
 PROJECT_JA4 = '/usr/local/opnsense/scripts/xgs/ja4_cut.py'
 
@@ -66,6 +72,26 @@ def tables():
     return out
 
 
+def inside_rules(path=None):
+    """The lists whose "from inside" rule pf was given at the last filter reload, by its description,
+    as os-netreport reads it: the rules hook registers one only for a command-and-control list while
+    outbound is blocked, and only where an interface counts as inside (plugins.inc.d/blocklists.inc).
+    A line written commented out - a rule OPNsense could not place - is not one. Empty when the file
+    cannot be read."""
+    names = set()
+    try:
+        with open(path or RULES, encoding='utf-8', errors='replace') as handle:
+            for line in handle:
+                if line.lstrip().startswith('#'):
+                    continue
+                found = INSIDE.search(line)
+                if found:
+                    names.add(found.group(1))
+    except OSError:
+        pass
+    return names
+
+
 def main():
     try:
         root = ET.parse(CONFIG).getroot()
@@ -79,6 +105,7 @@ def main():
     # the aliases this plugin makes, as cut.py, apply.php and the rules hook count them: one of the
     # owner's by another blocklists_ name is not shown as one of its lists
     mine = cut.owned(FEEDS)
+    inside = inside_rules()
     lists = []
     for alias in root.findall('OPNsense/Firewall/Alias/aliases/alias'):
         name = alias.findtext('name') or ''
@@ -95,6 +122,8 @@ def main():
             'what': feed.get('what', ''), 'terms': feed.get('terms', ''),
             'loaded': name in pf, 'entries': counters.get('entries'),
             'in_blocked': counters.get('in_blocked'), 'out_blocked': counters.get('out_blocked'),
+            # its "Blocked in" counts the packets of devices inside too: they are blocked coming in
+            'inside': name in inside,
         })
 
     unbound = root.find('OPNsense/unboundplus')
@@ -107,6 +136,15 @@ def main():
                 'urls': len([u for u in (item.findtext('lists') or '').split(',') if u]),
                 'description': item.findtext('description') or '',
             })
+
+    # ThreatFox (2026-11-17): whether it is chosen, whether an abuse.ch Auth-Key is saved - never the
+    # key, which the page is not given (the field says saved or not set) - and threatfox.py's last line
+    fetched = load(THREATFOX_STATUS, {})
+    threatfox = {
+        'chosen': 'threatfox' in ((general.findtext('feeds') if general is not None else '') or '').split(','),
+        'key': bool(((general.findtext('threatfox_key') if general is not None else '') or '').strip()),
+        'message': str(fetched.get('message') or '') if isinstance(fetched, dict) else '',
+    }
 
     listed, problem, bad, _ = ja4_cut.settings()
     project_ja4 = [f for f in re.split(r'[\s,]+', root.findtext('OPNsense/XGS/general/cut_ja4') or '') if f]
@@ -123,6 +161,7 @@ def main():
         'cut': {'on': general is not None and (general.findtext('cut') or '0') == '1',
                 'last': load(CUT_STATUS, {})},
         'ja4': {'listed': listed, 'not_read': bad, 'problem': problem, 'last': load(JA4_STATUS, {})},
+        'threatfox': threatfox,
         'project': {'installed': os.path.exists(PROJECT_CUT) or os.path.exists(PROJECT_JA4),
                     'lists_watched': len(project_lists), 'ja4_listed': len(project_ja4)},
     }))
