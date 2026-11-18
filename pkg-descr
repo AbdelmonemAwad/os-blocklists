@@ -10,6 +10,11 @@ address are cut, and on a Sophos XGS taken out of the coprocessor.
 Plugin Changelog
 ================
 
+1.0.3
+
+* Phase 1: command-and-control blocks logged and cut in hardware, lists
+  every two hours, ThreatFox with the owner's abuse.ch key
+
 1.0.2
 
 * an update installed only as its owner signed it: the release's
