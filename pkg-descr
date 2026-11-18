@@ -12,8 +12,21 @@ Plugin Changelog
 
 1.0.3
 
-* Phase 1: command-and-control blocks logged and cut in hardware, lists
-  every two hours, ThreatFox with the owner's abuse.ch key
+* with Both ways, a device inside that tries to reach a
+  command-and-control list is blocked and logged by its own address, on
+  the inside interfaces; os-netreport 1.0.7's alert reads that log
+* where os-xgs-npu is installed, the connections of a listed address,
+  and those cut by their JA4 fingerprint, are dropped in hardware too,
+  and handed back to the host when the address leaves every watched
+  list; with os-xgs-npu's releases so far, which do not carry its
+  hand-back yet (merged 2026-11-18), nothing is handed back and nothing
+  breaks
+* lists fetched every two hours, never more often than their publisher
+  allows: Spamhaus DROP, Emerging Threats and CINS Army stay at once a
+  day
+* ThreatFox's command-and-control addresses, with the owner's abuse.ch
+  Auth-Key, at the pace abuse.ch's terms allow; without a key nothing is
+  fetched and the page says so
 
 1.0.2
 
