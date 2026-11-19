@@ -484,10 +484,48 @@ repository): it reaches `dnsbl.json`, and matching is unchanged. The counts of `
 read on 2026-11-19 from the archives UT1 served that day; Gambling, counted again from its archive
 (448,522 bytes, 2026-11-18 21:50 UTC), holds 95,180 distinct names - none under another of them - and
 14 bare IPv4 lines: UT1's page gave 46,123 on 2026-10-08, when its `domains` file was about half the size
-(865,619 bytes in a mirror of 2026-10-12, 1,665,954 now). To be done on a firewall before this is merged: the page, a category applied and a
-name of it blocked, an exception let through, a category turned off and its names back, the Lookup tab's
-three answers, Unbound's memory with the largest category allowed, and a removal leaving nothing in
-Unbound.
+(865,619 bytes in a mirror of 2026-10-12, 1,665,954 now).
+
+On an XGS 3300 and an XGS 136, 2026-11-19, OPNsense 26.7.9 with Unbound DNS as the
+resolver and no blocklist policy of its own, this branch's files over release 1.0.3 (config.xml, the
+configuration backups and Unbound's `dnsbl.json` kept first and put back after - config.xml as before,
+the backups as many as before, no `dnsbl.json`, as there was none):
+
+- Gambling chosen and applied from the firewall's own fetch of UT1 in 4 s (10 s on the XGS 136):
+  95,180 names in `dnsbl.json` under the policy "Block Lists: web categories (UT1)" beside Unbound's
+  own; a name of it and a name under it answered 0.0.0.0, a name in no category its real address.
+- `pokerstars.com` in the exceptions: it and `www.pokerstars.com` answered their real addresses,
+  `bet365.com` still 0.0.0.0, and the excepted name not given to Unbound (95,179 names).
+- Unbound's own blocklist rebuild (`configctl unbound dnsbl`, as its page's Apply runs it): the
+  policy kept.
+- The Lookup tab, through its configd action: an address in a Spamhaus DROP network - the table
+  that holds it; `www.bet365.com` - Gambling as a name under `bet365.com`, and the web categories'
+  policy in Unbound's data; `pokerstars.com` - Gambling, let through by its exception, and in no
+  policy; `opnsense.org` - nowhere; `a;id`, `x y` and an empty one refused. On the page (Arabic and
+  English): the same answer for `www.bet365.com`.
+- Malware chosen (241,045 names, one archive with Phishing): applied in 7 s. Unbound's memory, each
+  90 seconds after a restart of Unbound: 265 MiB with it and 73 MiB with none on the XGS 3300 (818
+  bytes a name), 242 MiB and 52 MiB on the XGS 136 (809 bytes a name); a reload of the same data
+  peaked at 344 MiB on the XGS 3300, sampled every second. `bet365.com` was blocked under Malware
+  too: UT1 lists it there as well.
+- Categories turned off: their names answered their real addresses again, and the policy left
+  Unbound's data.
+- The page: the Web categories tab with 64 categories to choose, each with its names and memory,
+  Adult in the table, greyed, "cannot be chosen" with its reason, Apply and its last run. Found
+  there and changed in this branch: the memory estimate (527 bytes a name, measured on a PC) now the
+  firewall's 820; Adult's reason cut by the grid's one line - wrapped; a Latin comma in the Lookup
+  tab's Arabic - one translated format. The JA4 card's text ("cut by TLS fingerprint: ...") reaches an
+  Arabic page in English: from release 1.0.3's `ja4_cut.py`, not changed here.
+
+Not tried on a firewall: a removal of the plugin (`install/uninstall.sh` and the package's) with
+categories applied - the checks run the removers' own loop.
+
+| Web categories (Arabic) | Lookup (Arabic) |
+| --- | --- |
+| ![The Web categories tab, in Arabic](docs/images/categories/categories-ar.png) | ![The Lookup tab, in Arabic](docs/images/categories/lookup-ar.png) |
+
+In English: [Web categories](docs/images/categories/categories-en.png),
+[Lookup](docs/images/categories/lookup-en.png).
 
 ## Installation
 
