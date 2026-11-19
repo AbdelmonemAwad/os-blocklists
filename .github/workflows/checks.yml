@@ -92,6 +92,16 @@ jobs:
       - name: The Lookup tab answers, and takes names and addresses only
         run: python3 tools/test-lookup.py
 
+      # What the IPS drops (ff-10): an eve.json written as Suricata writes it - TCP drops in; UDP, ICMP,
+      # Suricata's event rules, IDS mode's alerts, the firewall's own, private and special addresses out;
+      # the time kept, the cap, the log's position and rotation, off and on - and apply.php's alias for it
+      # and the removers' own step taking that alias out.
+      - name: What the IPS drops is blocked for a while, and only what should be
+        run: python3 tools/test-ids.py
+
+      - name: The IPS drops' alias made by Apply, and taken out by a removal
+        run: php tools/test-ids.php
+
       # Every file the installer lays down is removed by the uninstaller, and none of OPNsense's with it:
       # the web categories' handler sits in OPNsense's own folder of Unbound handlers.
       - name: The removal takes everything of the plugin's, and nothing of OPNsense's
