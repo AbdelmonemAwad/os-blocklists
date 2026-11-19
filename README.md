@@ -467,8 +467,21 @@ never fetched though written into config.xml by hand, the last good copy kept on
 unchosen and Block Lists off taken out, a rebuild that did not happen tried again. `tools/test-lookup.py`
 answers the plan's three - a name a UT1 category holds, an address in a listed table, a name in
 nothing - and refuses shell metacharacters, a name with spaces and an empty one; `tools/test-categories.php`
-runs the model's field and masks. The counts of `categories.json` were read on 2026-11-19 from the archives
-UT1 served that day. To be done on a firewall before this is merged: the page, a category applied and a
+runs the model's field and masks. After a review the same day the checks also run: a rebuild counted
+done only by the stamp in `dnsbl.json`, against a stand-in of `blocklists.py` that runs the handler -
+configctl answering while it goes on, a rebuild longer than the timeout, one of an older state, one that
+wrote nothing, a new handler after an install; the removers' own loop with `lockf`, configctl and the
+files stood in for - a rebuild running that writes the policy back, ones that leave at once; a download
+that trickles, one that never answers, redirects to plain HTTP or another host; a category only UT1's
+catalogue holds, that catalogue lost; nothing made or written with none chosen; the Lookup tab showing a
+policy of the owner's by its description only; and every text the page is given a catalogued msgid
+(`tools/check-strings.py` reads the scripts, the PHP and `categories.json` too). The handler's stamp
+was also run through OPNsense 26.7.9's own `blocklists` package and Unbound module (not in this
+repository): it reaches `dnsbl.json`, and matching is unchanged. The counts of `categories.json` were
+read on 2026-11-19 from the archives UT1 served that day; Gambling, counted again from its archive
+(448,522 bytes, 2026-11-18 21:50 UTC), holds 95,180 distinct names - none under another of them - and
+14 bare IPv4 lines: UT1's page gave 46,123 on 2026-10-08, when its `domains` file was about half the size
+(865,619 bytes in a mirror of 2026-10-12, 1,665,954 now). To be done on a firewall before this is merged: the page, a category applied and a
 name of it blocked, an exception let through, a category turned off and its names back, the Lookup tab's
 three answers, Unbound's memory with the largest category allowed, and a removal leaving nothing in
 Unbound.
