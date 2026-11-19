@@ -114,6 +114,16 @@
                 <Default>1</Default>
             </ids_outside>
             <!--
+                The owner's own exceptions to what the IPS drops (2026-11-19 review): addresses and networks
+                never entered. Each checked again by ids_list.py, which leaves out what is not one.
+            -->
+            <ids_never type="CSVListField">
+                <Required>N</Required>
+                <Mask>/\A[0-9A-Fa-f:.]{2,45}(\/[0-9]{1,3})?\z/</Mask>
+                <MaskPerItem>Y</MaskPerItem>
+                <ValidationMessage>Each is an address or a network, such as 198.51.100.7, 198.51.100.0/24 or 2001:db8::/48.</ValidationMessage>
+            </ids_never>
+            <!--
                 UT1's web categories chosen (2026-11-19), applied through OPNsense's own Unbound blocklist by
                 scripts/blocklists/categories.py and the handler scripts/unbound/blocklists/blocklists_ut1.py.
                 CategoryField offers the categories of scripts/blocklists/categories.json and those UT1's own

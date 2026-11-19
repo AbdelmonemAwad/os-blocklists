@@ -598,6 +598,7 @@
             <thead>
                 <tr>
                     <th data-column-id="address" data-formatter="address" data-type="string" data-identifier="true" data-width="14em">{{ lang._('Address') }}</th>
+                    <th data-column-id="at" data-type="string" data-width="11em">{{ lang._('First dropped') }}</th>
                     <th data-column-id="last" data-type="string" data-width="11em">{{ lang._('Last dropped') }}</th>
                     <th data-column-id="until" data-type="string" data-width="11em">{{ lang._('Held until') }}</th>
                     <th data-column-id="count" data-type="numeric" data-width="6em">{{ lang._('Drops') }}</th>
@@ -609,7 +610,7 @@
             <tfoot></tfoot>
         </table>
         <div class="text-muted" style="padding: 0 15px 15px;">
-            {{ lang._('The sources of what the Intrusion Detection IPS policy dropped over TCP, each blocked by this page and its open connections cut, until the time after its last drop is over. Set in Settings: Block what the IPS drops, Keep an address and Outside addresses only. The list starts empty after a reboot where /var is kept in memory.') }}
+            {{ lang._('The sources of what the Intrusion Detection IPS policy dropped on connections it saw established over TCP, each blocked by this page until the time after its last drop is over; its open connections are cut where Cut open connections is on, and on the coprocessor of a Sophos XGS where os-xgs-npu Cut in hardware is on and Direction is Both ways. Never the firewall itself, what it depends on or who manages it, nor Never block. Set in Settings: Block what the IPS drops, Keep an address, Outside addresses only and Never block. The list starts empty after a reboot where /var is kept in memory.') }}
         </div>
     </div>
     <div id="lookup" class="tab-pane">
