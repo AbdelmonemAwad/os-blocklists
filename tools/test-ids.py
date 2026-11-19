@@ -506,6 +506,14 @@ def run(tmp):
     check(page['on'] and page['entries'] == 1 and page['minutes'] == 60 and page['problem'] is None
           and page['message'][0]['text'] == '%s addresses held, each for %s minutes after its last drop',
           'the page\'s line: on, how many held, for how long: %r' % (page,))
+    # an address entered after the record was written (the lab, 2026-11-19: "0 held" beside one held): the line counts
+    # the state as it is
+    state = json.load(open(ids_list.STATE, encoding='utf-8'))
+    state['message'] = [{'text': '%s addresses held, each for %s minutes after its last drop', 'args': ['0', 60]}]
+    json.dump(state, open(ids_list.STATE, 'w', encoding='utf-8'))
+    page = ids_list.page()
+    check(page['message'][0]['args'][0] == '1' and len(page['message']) == 1,
+          'the page\'s line: the count held now, not the last record\'s: %r' % (page['message'],))
     listed = quiet_main('--list')['entries']
     check([r['address'] for r in listed] == ['198.51.100.71'] and listed[0]['msg'] == 'LOCAL test drop'
           and listed[0]['sid'] == 1000001 and listed[0]['until'].endswith('UTC') and listed[0]['at'].endswith('UTC'),

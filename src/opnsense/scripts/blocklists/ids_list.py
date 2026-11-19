@@ -834,9 +834,16 @@ def page():
     state = state if isinstance(state, dict) else {}
     entries = state.get('entries') if isinstance(state.get('entries'), dict) else {}
     last = state.get('last') if isinstance(state.get('last'), dict) else {}
+    # the line's first part as things are now, not as the last run's end recorded them: that record is written once a
+    # minute under cron, and an address entered since would read "0 held" beside a grid holding it (the lab,
+    # 2026-11-19); the rest of the record - a problem, the alias, the table's error - kept as recorded
+    held = T('%s addresses held, each for %s minutes after its last drop', format(len(entries), ','), conf['minutes'])
+    off = T('off: nothing the IPS drops is entered')
+    recorded = state.get('message') if isinstance(state.get('message'), list) else []
+    rest = [p for p in recorded if not (isinstance(p, dict) and p.get('text') in (held['text'], off['text']))]
     return {'on': conf['on'], 'minutes': conf['minutes'], 'outside': conf['outside'], 'problem': conf['problem'],
             'alias': conf['alias'], 'entries': len(entries) if conf['on'] else 0,
-            'message': state.get('message') if isinstance(state.get('message'), list) else [],
+            'message': [held if conf['on'] else off] + (rest if conf['on'] else []),
             'last_run': last.get('run')}
 
 
