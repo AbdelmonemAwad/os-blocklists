@@ -38,6 +38,10 @@ class ServiceController extends ApiControllerBase
             $status['categories']['message'] = BlockLists::text($status['categories']['message'] ?? []);
             unset($status['categories']['rows'], $status['categories']['refused']);
         }
+        if (isset($status['ids']) && is_array($status['ids'])) {
+            $status['ids']['message'] = BlockLists::text($status['ids']['message'] ?? []);
+            $status['ids']['problem'] = BlockLists::text($status['ids']['problem'] ?? '');
+        }
         return $status;
     }
 
@@ -56,7 +60,9 @@ class ServiceController extends ApiControllerBase
             $proto = (string)($list['proto'] ?? '');
             $rows[] = [
                 'name' => (string)($list['name'] ?? ''),
-                'list' => preg_replace('/^Block Lists: /', '', (string)($list['description'] ?? '')),
+                /* a publisher's list by its own name; what the IPS drops (ff-10) by a text translated */
+                'list' => ($list['name'] ?? '') === 'blocklists_ids' ? gettext('IPS drops') :
+                    preg_replace('/^Block Lists: /', '', (string)($list['description'] ?? '')),
                 'what' => (string)($list['what'] ?? ''),
                 'terms' => (string)($list['terms'] ?? ''),
                 'proto' => $proto !== '' ? $proto : 'IPv4, IPv6',
@@ -156,6 +162,48 @@ class ServiceController extends ApiControllerBase
     }
 
     /**
+     * the IPS drops tab's grid (ff-10, 2026-11-19): each address held, when its first and last drop were,
+     * until when it is held, and the signature that dropped it last (scripts/blocklists/ids_list.py --list)
+     */
+    public function searchIdsAction()
+    {
+        $rows = [];
+        foreach (($this->json('ids_entries')['entries'] ?? []) as $entry) {
+            $rows[] = [
+                'address' => (string)($entry['address'] ?? ''),
+                'at' => (string)($entry['at'] ?? ''),
+                'last' => (string)($entry['last'] ?? ''),
+                'until' => (string)($entry['until'] ?? ''),
+                'sid' => isset($entry['sid']) ? (int)$entry['sid'] : null,
+                'msg' => (string)($entry['msg'] ?? ''),
+                'count' => (int)($entry['count'] ?? 0),
+            ];
+        }
+        return $this->searchRecordsetBase($rows, ['address', 'msg']);
+    }
+
+    /**
+     * One address taken out of what the IPS drops now - the grid's button. Checked here as an address
+     * before configd sees it, and again by the script.
+     */
+    public function idsRemoveAction()
+    {
+        if (!$this->request->isPost()) {
+            return ['error' => 'POST only'];
+        }
+        $address = trim((string)$this->request->getPost('address'));
+        if (filter_var($address, FILTER_VALIDATE_IP) === false) {
+            return ['removed' => false, 'message' => gettext('not an address')];
+        }
+        $result = json_decode((new Backend())->configdpRun('blocklists ids_remove', [$address]), true);
+        if (!is_array($result)) {
+            return ['removed' => false, 'message' => gettext('No answer could be read.')];
+        }
+        $result['message'] = BlockLists::text($result['message'] ?? '');
+        return $result;
+    }
+
+    /**
      * the JA4 tab's grid: the fingerprints in the IDS's TLS log now, the most frequent first
      */
     public function searchSeenAction()
@@ -176,7 +224,8 @@ class ServiceController extends ApiControllerBase
      * aliases (which fetches the lists) reloaded the way Firewall: Aliases reloads them, ThreatFox's
      * list fetched in the background (threatfox.py --apply: a download may take minutes, and Apply
      * does not wait for it), the web categories fetched and applied to Unbound in the background too
-     * (categories.py --apply, 2026-11-19), then a first round of cutting
+     * (categories.py --apply, 2026-11-19), what the IPS drops read once (ids_list.py, the alias it fills
+     * just made or removed), then a first round of cutting
      */
     public function applyAction()
     {
@@ -193,6 +242,7 @@ class ServiceController extends ApiControllerBase
         $backend->configdRun('filter refresh_aliases');
         $backend->configdRun('blocklists threatfox', true);
         $backend->configdRun('blocklists categories', true);
+        $backend->configdRun('blocklists ids', true);
         $result['cut'] = json_decode($backend->configdRun('blocklists cut'), true);
         $result['ja4'] = json_decode($backend->configdRun('blocklists ja4'), true);
         return $result;

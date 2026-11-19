@@ -57,4 +57,30 @@
         <type>text</type>
         <help>Cut every TLS connection whose client shows one of these JA4 fingerprints, separated by commas - it names the program, whatever server it goes to. Read from the Intrusion Detection's TLS log, which must carry the ja4 field; the JA4 tab says what is missing and which fingerprints are seen.</help>
     </field>
+    <field>
+        <id>blocklists.general.ids</id>
+        <label>Block what the IPS drops</label>
+        <type>checkbox</type>
+        <help>Block for a while the source of what the Intrusion Detection's IPS policy drops: each alert it logs as blocked over a connection it saw established puts the address that sent the dropped traffic into a list of the plugin's own, IPS drops (blocklists_ids), blocked like the other lists in the Direction set here. Its open connections are cut where Cut open connections is on - on a Sophos XGS with os-xgs-npu's Cut in hardware on, and Direction Both ways, on the coprocessor too. Only in IPS mode (Netmap or Divert): IDS mode logs nothing as blocked. An alert's source can be forged, so only an alert over TCP, on a connection whose application protocol Suricata recognised (it does so only once the connection is established with the real address) and with packets both ways past the handshake, enters: a lone SYN, a scan's or one forged with another's address, never does; nor one of Suricata's own decoder, stream and application-layer event rules (signature ids 2200000-2299999), which drop one packet, not a connection. Never entered: an address of the firewall's own (every interface's, its virtual IPs and the external addresses of its 1:1 and outbound NAT), loopback, multicast, unspecified or link-local; its gateways and their monitor addresses; its DNS servers; its VPN peers (IPsec remote gateways, WireGuard endpoints, OpenVPN remotes); an address with a connection open to its web GUI or SSH; and what Never block holds. Taken from the moment it is turned on: nothing logged before. At most 200 addresses enter at a reading of the log, every three seconds, and 10,000 are held: past them, those dropped longest ago leave first. Turned off, every address leaves at once. Where /var is kept in memory, a reboot starts the list empty.</help>
+    </field>
+    <field>
+        <id>blocklists.general.ids_minutes</id>
+        <label>Keep an address (minutes)</label>
+        <type>text</type>
+        <help>How long an address stays in IPS drops after the last alert that put it there: 60 minutes by default, 5 to 10080 (a week). Each new drop of it starts the time again, and a change here applies to the addresses already held too.</help>
+    </field>
+    <field>
+        <id>blocklists.general.ids_outside</id>
+        <label>Outside addresses only</label>
+        <type>checkbox</type>
+        <help>Leave out every address inside the firewall's own networks, so a false alarm never cuts a device of yours off for the time above: every network connected to the firewall (each interface's address and prefix, IPv4 and IPv6, WAN's too), its delegated IPv6 prefixes, its VPN tunnel and remote networks, its static routes' networks, and the private ones - 10/8, 172.16/12, 192.168/16, the shared 100.64/10 (where VPN overlays live too) and IPv6's unique local fc00::/7. An address held that is now inside them leaves. Off, a device inside is blocked as well when the IPS drops what it sends.</help>
+    </field>
+    <field>
+        <id>blocklists.general.ids_never</id>
+        <label>Never block</label>
+        <type>select_multiple</type>
+        <style>tokenize</style>
+        <allownew>true</allownew>
+        <help>Addresses and networks never put into IPS drops, whatever the IPS drops from them - your own exceptions, such as a partner's or a monitoring service's: each entered on its own, as 198.51.100.7, 198.51.100.0/24 or 2001:db8::/48. An address held that is in them leaves at the next reading.</help>
+    </field>
 </form>

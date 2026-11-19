@@ -8,7 +8,8 @@ What the page shows, as one JSON object: each list this plugin owns with its ent
 rules blocked, the countries, the DNS block lists OPNsense's Unbound has, the cutting of open
 connections and of JA4 fingerprints, ThreatFox's fetch and whether an abuse.ch Auth-Key is saved (never
 the key), UT1's web categories - every one offered, what is chosen and applied, and why one is not
-(categories.page()) - and what os-xgs-npu does beside it where it is installed.
+(categories.page()) - what the IPS drops holds (ids_list.page()), and what os-xgs-npu does beside it
+where it is installed.
 
     status.py
 
@@ -25,6 +26,7 @@ import xml.etree.ElementTree as ET
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import categories                                                        # noqa: E402
 import cut                                                               # noqa: E402
+import ids_list                                                          # noqa: E402
 import ja4_cut                                                           # noqa: E402
 
 CONFIG = '/conf/config.xml'
@@ -154,6 +156,12 @@ def main():
     except Exception as e:      # the rest of the page is read all the same
         web = {'error': 'the web categories could not be read: %s' % e, 'rows': []}
 
+    # what the IPS drops (ff-10, 2026-11-19): the IPS drops tab's line
+    try:
+        ids = ids_list.page()
+    except Exception as e:      # the rest of the page is read all the same
+        ids = {'error': 'what the IPS drops could not be read: %s' % e}
+
     listed, problem, bad, _ = ja4_cut.settings()
     project_ja4 = [f for f in re.split(r'[\s,]+', root.findtext('OPNsense/XGS/general/cut_ja4') or '') if f]
     project_lists = [u for u in (root.findtext('OPNsense/XGS/general/cut_lists') or '').split(',') if u.strip()]
@@ -171,6 +179,7 @@ def main():
         'ja4': {'listed': listed, 'not_read': bad, 'problem': problem, 'last': load(JA4_STATUS, {})},
         'threatfox': threatfox,
         'categories': web,
+        'ids': ids,
         'project': {'installed': os.path.exists(PROJECT_CUT) or os.path.exists(PROJECT_JA4),
                     'lists_watched': len(project_lists), 'ja4_listed': len(project_ja4)},
     }))

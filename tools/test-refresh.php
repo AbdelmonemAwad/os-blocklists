@@ -48,14 +48,20 @@ $want = [
     'cins_army' => [24, 24, 24, 24],
     'blocklist_de' => [2, 6, 12, 24],         /* generated every 30 minutes */
 ];
-/* ThreatFox (2026-11-17) is no URL table: threatfox.py fetches it at abuse.ch's pace (tools/test-threatfox.py) */
+/* ThreatFox (2026-11-17) is no URL table: threatfox.py fetches it at abuse.ch's pace (tools/test-threatfox.py);
+   nor are the IPS drops (2026-11-19), which ids_list.py fills from the Intrusion Detection and never fetches */
 $own = array_filter($feeds, function ($feed) {
     return !isset($feed['url']);
 });
-check(array_keys($own) === ['threatfox'] && ($own['threatfox']['key'] ?? '') === 'abuse.ch',
-    'the one list without a URL is ThreatFox, fetched by the plugin with the abuse.ch key');
+check(array_keys($own) === ['threatfox', 'ids'] && ($own['threatfox']['key'] ?? '') === 'abuse.ch'
+    && ($own['ids']['local'] ?? null) === true, 'the lists without a URL: ThreatFox, fetched by the plugin with the '
+    . 'abuse.ch key, and the IPS drops, filled by the plugin itself');
 check(array_keys(array_diff_key($feeds, $own)) == array_keys($want), 'every URL table of feeds.json is checked here');
 foreach ($feeds as $id => $feed) {
+    if (($feed['local'] ?? null) === true) {
+        check(!array_key_exists('min_hours', $feed), "$id: filled here, never fetched - no min_hours");
+        continue;
+    }
     check(is_int($feed['min_hours'] ?? null) || is_float($feed['min_hours'] ?? null), "$id: min_hours is a number");
     check(!array_key_exists('days', $feed), "$id: no days key left behind");
     if (isset($own[$id])) {

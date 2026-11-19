@@ -39,7 +39,31 @@ rm -f /usr/local/opnsense/scripts/unbound/blocklists/__pycache__/blocklists_ut1.
 [ -d /usr/local/opnsense/scripts/blocklists ] &&
     find /usr/local/opnsense/scripts/blocklists -depth -type d -empty -delete 2> /dev/null
 
+# The IPS drops' alias (ff-10, 2026-11-19), blocklists_ids: addresses held for a while, nothing of the
+# owner's - taken out of config.xml with the plugin, where nothing else names it (switched off where
+# something does), so the filter reload declares no table of it and the tables' loop below empties it.
+# Through OPNsense's own alias model: the plugin's files are gone, OPNsense's are not.
+/usr/local/bin/php -r '
+require_once("script/load_phalcon.php");
+$model = new \OPNsense\Firewall\Alias();
+foreach (iterator_to_array($model->aliases->alias->iterateItems()) as $uuid => $alias) {
+    if ((string)$alias->name !== "blocklists_ids") {
+        continue;
+    }
+    $text = (string)@file_get_contents("/conf/config.xml");
+    if (preg_match_all("/\\bblocklists_ids\\b/", $text) > 1 || substr_count($text, (string)$uuid) > 1) {
+        $alias->enabled = "0";
+    } else {
+        $model->aliases->alias->del($uuid);
+    }
+    $model->serializeToConfig();
+    \OPNsense\Core\Config::getInstance()->save();
+}
+' > /dev/null 2>&1 || true
 [ -f /usr/local/sbin/configctl ] && /usr/local/sbin/configctl filter reload > /dev/null 2>&1 || true
+# The IPS drops' table emptied, whatever names its alias: its addresses are the plugin's, held for a while,
+# and nothing else fills it - a rule of the owner's naming it keeps the alias (switched off), not them.
+/sbin/pfctl -t blocklists_ids -T flush > /dev/null 2>&1 || true
 
 # Unbound's blocklist rebuilt without the web categories' policy, its handler and data being gone, until
 # it no longer holds it: nothing of the plugin's stays in Unbound, which reads the new file within a minute.
