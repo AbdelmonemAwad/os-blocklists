@@ -266,10 +266,12 @@ def stamp(text):
         return None
 
 
-def tls_events(fh, at):
-    """Every TLS line with a JA4 from fh's position, as an event, one at a time - a generator, so the
-    caller keeps what it looks for and nothing else. at['end'] follows the offset of the next whole
-    line; a last line not yet ended is left for the next reading."""
+def eve_lines(fh, at, needles):
+    """(offset, line) for every whole line of the log from fh's position that holds each of `needles`
+    (bytes, looked for before a line is parsed), one at a time - a generator, so the caller keeps what
+    it looks for and nothing else. at['end'] follows the offset of the next whole line; a last line not
+    yet ended is left for the next reading. Its TLS lines are this script's; the alerts the IPS logged
+    as blocked are ids_list.py's (2026-11-19)."""
     pos = fh.tell()
     at['end'] = pos
     for raw in iter(fh.readline, b''):
@@ -277,8 +279,13 @@ def tls_events(fh, at):
             break
         start, pos = pos, pos + len(raw)
         at['end'] = pos
-        if b'"event_type":"tls"' not in raw or b'"ja4"' not in raw:
-            continue
+        if all(needle in raw for needle in needles):
+            yield start, raw
+
+
+def tls_events(fh, at):
+    """Every TLS line with a JA4 from fh's position, as an event, one at a time (eve_lines())."""
+    for start, raw in eve_lines(fh, at, (b'"event_type":"tls"', b'"ja4"')):
         try:
             ev = json.loads(raw)
             event = {
