@@ -216,7 +216,10 @@ Block lists in one place: addresses, DNS names, UT1's web categories, countries 
     holds its lock, then reads that stamp; a rebuild not done, or done from an older state, is done
     again at the next run. The page's Apply runs it at once, in the background. A download that fails keeps the
     last good copy, and the tab says so; a category no longer chosen, or Block Lists turned off, is taken
-    out at the next run. With none chosen the script contacts no one and writes nothing.
+    out at the next run. With none chosen the script contacts no one; on a firewall where none was ever
+    chosen it makes nothing - no folder, no file - and once what was applied is taken out it writes
+    nothing more (its folder, `/var/db/os-blocklists/categories`, keeps its lock file and its last
+    state).
   - *Exceptions.* Names let through, each with every name under it: written into the policy's passlist
     as `(.*\.)?<name>$`, as Unbound's module matches it from the start of the name asked for, so
     `example.com` lets `www.example.com` through and not `example.com.evil.net`; a name an exception

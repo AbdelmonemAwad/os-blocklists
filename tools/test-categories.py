@@ -888,6 +888,62 @@ def texts_tests(status, page):
           'texts: every msgid the page is given is in source.json: %r' % (sorted({t for t in found if isinstance(t, str)} - catalogued),))
 
 
+def quiet_tests(tmp):
+    """What the README says of a firewall where no category is chosen (2026-11-19 review): no one
+    contacted; where none was ever chosen nothing made; once what was applied is taken out, nothing
+    written - checked on the files themselves, through main() as cron runs it."""
+    from contextlib import redirect_stdout
+    state = os.path.join(tmp, 'state')
+    categories.STATE_DIR = state
+    categories.STATUS = os.path.join(state, 'status.json')
+    categories.ACTIVE = os.path.join(state, 'unbound.json')
+    categories.CATALOGUE = os.path.join(state, 'catalogue.json')
+    categories.LOCK = os.path.join(state, 'lock')
+    categories.MARKER = os.path.join(state, 'rebuild')
+    categories.CONFIG = os.path.join(tmp, 'config.xml')
+    categories.DNSBL = os.path.join(tmp, 'dnsbl.json')
+    categories.CORE_LOCK = os.path.join(tmp, 'core.lock')
+    server = Server()
+    server.put('gambling.tar.gz', tar([('gambling/domains', b'casino.example\n')]), 'Wed, 18 Nov 2026 21:50:17 GMT')
+    categories.URLOPEN = server
+    categories.say = lambda message: None
+    asked = []
+    categories.configctl = lambda *args: asked.append(args) or types.SimpleNamespace(returncode=0, stdout='', stderr='')
+    categories.core_busy = lambda: False
+
+    def main(*argv):
+        with redirect_stdout(io.StringIO()):
+            categories.main(list(argv))
+
+    def files():
+        return {n: (os.stat(os.path.join(state, n)).st_mtime_ns, os.path.getsize(os.path.join(state, n)))
+                for n in sorted(os.listdir(state))} if os.path.isdir(state) else None
+
+    write(categories.CONFIG, CONFIG.format(enabled='1', categories='', exceptions=''))
+    main()
+    main('--apply')
+    main('--installed')
+    check(not os.path.exists(state) and server.requests == [] and asked == [],
+          'quiet: none ever chosen - no folder, no file, no one contacted, nothing rebuilt')
+    write(categories.CONFIG, CONFIG.format(enabled='0', categories='gambling', exceptions=''))
+    main()
+    check(not os.path.exists(state) and server.requests == [], 'quiet: chosen but Block Lists off - nothing made either')
+    write(categories.CONFIG, CONFIG.format(enabled='1', categories='gambling', exceptions=''))
+    main('--apply')
+    check(os.path.exists(os.path.join(state, 'gambling.domains')) and server.asked('gambling.tar.gz'),
+          'quiet: a category chosen - its folder made, the category fetched')
+    write(categories.CONFIG, CONFIG.format(enabled='1', categories='', exceptions=''))
+    main('--apply')
+    check(not os.path.exists(os.path.join(state, 'gambling.domains')), 'quiet: unchosen - taken out')
+    before, server.requests[:] = files(), []
+    main()
+    main()
+    main('--apply')
+    check(files() == before and server.requests == [],
+          'quiet: once taken out, runs write nothing - no file made or changed - and contact no one: %r -> %r'
+          % (before, files()))
+
+
 class Trickle:
     """A server that sends a byte every 50 ms, without end: read1 gives what has come, read(n) would
     wait for n bytes."""
@@ -1066,6 +1122,8 @@ def main():
         unpack_tests(os.path.join(tmp, 'unpack'))
         os.makedirs(os.path.join(tmp, 'run'))
         run_tests(os.path.join(tmp, 'run'))
+        os.makedirs(os.path.join(tmp, 'quiet'))
+        quiet_tests(os.path.join(tmp, 'quiet'))
         deadline_tests()
         catalogue_tests()
         config_tests()

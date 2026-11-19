@@ -673,11 +673,11 @@ def written(stamp_now, since=None):
     return isinstance(policy, dict) and policy.get('stamp') == stamp_now
 
 
-def core_busy():
-    """Whether OPNsense's blocklists.py runs now: its lock held. Probed and let go at once; the lock file
-    is opened for reading only - never made, emptied or removed here."""
+def held(path):
+    """Whether a lock file is held by a run now. Probed and let go at once; the file is opened for reading
+    only - never made, emptied or removed here."""
     try:
-        fd = os.open(CORE_LOCK, os.O_RDONLY)
+        fd = os.open(path, os.O_RDONLY)
     except OSError:
         return False
     try:
@@ -689,6 +689,11 @@ def core_busy():
         return False
     finally:
         os.close(fd)
+
+
+def core_busy():
+    """Whether OPNsense's blocklists.py runs now: its lock (CORE_LOCK) held."""
+    return held(CORE_LOCK)
 
 
 def pause(seconds):
@@ -896,14 +901,8 @@ def installed():
 
 
 def busy():
-    """Whether a run holds the lock now (for the page)."""
-    try:
-        with open(LOCK, 'a') as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            fcntl.flock(lock, fcntl.LOCK_UN)
-            return False
-    except OSError:
-        return os.path.exists(LOCK)
+    """Whether a run holds the lock now (for the page): nothing made where there is none."""
+    return held(LOCK)
 
 
 def page(conf, entries=None, status=None):
@@ -964,8 +963,19 @@ def take(lock, wait):
 def main(argv):
     mode = 'installed' if '--installed' in argv else ('apply' if '--apply' in argv else 'cron')
     try:
+        if not os.path.isdir(STATE_DIR):
+            # where no category was ever applied, and none is chosen now: nothing made - no folder, no
+            # lock, no state - and no one contacted
+            conf = settings() if mode != 'installed' else None
+            if not (conf and conf['enabled'] and conf['categories']):
+                if mode == 'installed':
+                    print("Block Lists: web categories: no category applied: Unbound's blocklist left as it is")
+                else:
+                    print(json.dumps({'message': 'no category chosen'}))
+                return 0
         os.makedirs(STATE_DIR, mode=0o750, exist_ok=True)
-        with open(LOCK, 'w') as lock:
+        # opened to append: an existing lock file is neither emptied nor changed
+        with open(LOCK, 'a') as lock:
             if not take(lock, WAIT[mode]):
                 if mode == 'installed':
                     # a run is fetching: it, or the next, rebuilds Unbound's blocklist with the new handler
