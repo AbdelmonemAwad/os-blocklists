@@ -515,7 +515,7 @@
             <tfoot></tfoot>
         </table>
         <div class="text-muted" style="padding: 0 15px 15px;">
-            {{ lang._('Names: those of the copy fetched, or, marked ~, the count of the catalogue. Memory: what they would take in Unbound, an estimate at about 527 bytes a name, measured on a computer, not on a firewall. Made as: allow list marks a category UT1 made to let names through; chosen here, it is blocked like the others. UT1 asks that its categories be chosen, not all blocked at once.') }}
+            {{ lang._('Names: those of the copy fetched, or, marked ~, the count of the catalogue. Memory: what they would take in Unbound, an estimate at about 820 bytes a name, as measured on a firewall, and more for a moment while Unbound reloads them. Made as: allow list marks a category UT1 made to let names through; chosen here, it is blocked like the others. UT1 asks that its categories be chosen, not all blocked at once.') }}
         </div>
     </div>
     <div id="ja4" class="tab-pane">

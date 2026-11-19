@@ -15,7 +15,7 @@
 WHAT: the categories of UT1 (Universite Toulouse 1 Capitole), each a folder of names. The categories
 offered are those of the catalogue shipped beside this script (categories.json), and those of UT1's own
 catalogue, global_usage, where it could be fetched (CATALOGUE). Every one can be chosen but adult (decision
-d2): about 4.6 million names, about 2.3 GiB held by Unbound's blocklist module - refused here whatever
+d2): about 4.6 million names, about 3.5 GiB held by Unbound's blocklist module - refused here whatever
 config.xml or a catalogue says, and so is any archive with more than MAX_NAMES names.
 
 HOW IT REACHES UNBOUND: not through the owner's Unbound settings, which are left as they are. OPNsense's
@@ -116,7 +116,7 @@ WAIT = {'cron': 10, 'apply': 120, 'installed': 60}  # seconds a run waits for an
 REFRESH = {'h2': 2, 'h6': 6, 'h12': 12, 'h24': 24}     # "Fetch the lists", as updatefreq.php reads it
 REFRESH_DEFAULT = 'h2'
 # never, whatever config.xml or a catalogue says: decision d2
-REFUSED = {'adult': "about 4.6 million names, about 2.3 GiB held by Unbound's blocklist module: too much "
+REFUSED = {'adult': "about 4.6 million names, about 3.5 GiB held by Unbound's blocklist module: too much "
                     "for a firewall"}
 ID = re.compile(r'^[a-z0-9][a-z0-9_-]{0,63}\Z')
 # a validator header as a server may send it, and as it may be sent back: printable, one line
@@ -917,7 +917,7 @@ def page(conf, entries=None, status=None):
     applied = set(status.get('applied') or [])
     meta = load(SHIPPED, {})
     per_name = meta.get('bytes_per_name') if isinstance(meta, dict) else None
-    per_name = per_name if isinstance(per_name, int) and per_name > 0 else 527
+    per_name = per_name if isinstance(per_name, int) and per_name > 0 else 820
     chosen = set((conf or {}).get('categories') or [])
     rows = []
     for cid, entry in sorted(entries.items()):

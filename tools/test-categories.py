@@ -751,16 +751,16 @@ def run_tests(tmp):
     page = categories.page(categories.settings())
     rows = {r['id']: r for r in page['rows']}
     check(rows['adult']['refused'] and rows['adult']['state'] == '' and rows['adult']['approximate'] is True
-          and rows['adult']['memory'] == 4600371 * 527,
+          and rows['adult']['memory'] == 4600371 * 820,
           'page: adult with its reason, its size from UT1\'s page marked approximate: %r' % (rows['adult'],))
     check(rows['gambling']['chosen'] and rows['gambling']['applied'] and rows['gambling']['counted']
-          and rows['gambling']['names'] == 1 and rows['gambling']['memory'] == 527
+          and rows['gambling']['names'] == 1 and rows['gambling']['memory'] == 820
           and 'names, fetched' in categories.english(rows['gambling']['state']),
-          'page: gambling chosen and applied, the names of its copy, 527 bytes a name: %r' % (rows['gambling'],))
+          'page: gambling chosen and applied, the names of its copy, 820 bytes a name: %r' % (rows['gambling'],))
     check(rows['games']['chosen'] is False and rows['games']['counted'] is False and rows['games']['names'] > 1000,
           'page: a category not chosen - the catalogue\'s count')
     check(page['unbound'] is True and page['handler'] is True and page['exceptions'] == ['example.com']
-          and page['names'] == 1 and page['bytes_per_name'] == 527, 'page: the line\'s parts: %r' % ({k: v for k, v in page.items() if k != 'rows'},))
+          and page['names'] == 1 and page['bytes_per_name'] == 820, 'page: the line\'s parts: %r' % ({k: v for k, v in page.items() if k != 'rows'},))
     texts_tests(json.load(open(categories.STATUS)), page)
     shutil.rmtree(state)
 
@@ -1150,9 +1150,9 @@ def deadline_tests():
 def catalogue_tests():
     shipped = json.load(open(os.path.join(SCRIPTS, 'categories.json'), encoding='utf-8'))
     cats = shipped['categories']
-    check(shipped['bytes_per_name'] == 527 and shipped['licence'] == 'https://creativecommons.org/licenses/by-sa/4.0/'
+    check(shipped['bytes_per_name'] == 820 and shipped['licence'] == 'https://creativecommons.org/licenses/by-sa/4.0/'
           and shipped['download'] == categories.DOWNLOAD and re.match(r'^\d{4}-\d{2}-\d{2}$', shipped['counted']),
-          'categories.json: 527 bytes a name, the licence, the download folder, the day counted')
+          'categories.json: 820 bytes a name, the licence, the download folder, the day counted')
     check(len(cats) >= 60 and all(categories.ID.match(c) for c in cats), 'categories.json: %d categories, each an id' % len(cats))
     check(all(isinstance(e.get('name'), str) and e['name'] and isinstance(e.get('description'), str)
               and e.get('use') in ('block', 'allow') and isinstance(e.get('names'), int) for e in cats.values()),
@@ -1201,7 +1201,7 @@ def config_tests():
     ids = [f.findtext('id') for f in form.findall('field')]
     check(ids == ['blocklists.general.categories', 'blocklists.general.exceptions'], 'form: the two fields, %r' % ids)
     help_text = ' '.join(f.findtext('help') for f in form.findall('field'))
-    check('policy only' in help_text and 'Adult cannot be chosen' in help_text and '527 bytes a name' in help_text
+    check('policy only' in help_text and 'Adult cannot be chosen' in help_text and '820 bytes a name' in help_text
           and 'Allow and Block buttons of Reporting: Unbound DNS do not work' in help_text
           and 'Allow and Block buttons of Reporting: Unbound DNS do not work' in ' '.join(
               open(os.path.join(ROOT, 'README.md'), encoding='utf-8').read().split()),

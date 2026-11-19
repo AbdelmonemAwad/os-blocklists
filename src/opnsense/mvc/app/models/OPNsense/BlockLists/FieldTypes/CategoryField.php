@@ -59,7 +59,7 @@ class CategoryField extends BaseListField
         $meta = json_decode((string)@file_get_contents($shipped ?? self::$shipped), true);
         $extra = json_decode((string)@file_get_contents($fetched ?? self::$fetched), true);
         $per_name = is_array($meta) && is_int($meta['bytes_per_name'] ?? null) && $meta['bytes_per_name'] > 0 ?
-            $meta['bytes_per_name'] : 527;
+            $meta['bytes_per_name'] : 820;
         $found = [];
         foreach ([$meta, $extra] as $source) {
             $entries = is_array($source) && is_array($source['categories'] ?? null) ? $source['categories'] : [];

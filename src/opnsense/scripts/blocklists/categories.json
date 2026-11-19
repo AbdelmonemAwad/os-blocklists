@@ -4,7 +4,7 @@
  "download": "https://dsi.ut-capitole.fr/blacklists/download/",
  "licence": "https://creativecommons.org/licenses/by-sa/4.0/",
  "counted": "2026-11-19",
- "bytes_per_name": 527,
+ "bytes_per_name": 820,
  "categories": {
   "adult": {
    "name": "Adult",
@@ -12,7 +12,7 @@
    "use": "block",
    "names": 4600371,
    "approximate": true,
-   "refused": "about 4.6 million names, about 2.3 GiB held by Unbound's blocklist module: too much for a firewall"
+   "refused": "about 4.6 million names, about 3.5 GiB held by Unbound's blocklist module: too much for a firewall"
   },
   "agressif": {
    "name": "Aggressive",

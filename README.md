@@ -192,11 +192,14 @@ Block lists in one place: addresses, DNS names, UT1's web categories, countries 
     that page is not taken for a catalogue. Malware and phishing are one archive at UT1, the same file
     under its folder `phishing/`: chosen together, they are fetched once and held once.
   - *How big each is.* The page shows each category's names and the memory they would take in Unbound:
-    an estimate, at about 527 bytes a name - measured with OPNsense's own code on a PC in phase 0, not on
-    a firewall. The largest on 2026-11-19: Phishing and Malware 241,045 names (~121 MiB), the three
-    Proxies 109,793 each, the same names (~55 MiB), Gambling 95,180 (~48 MiB), Job search 60,740
-    (~31 MiB), Shopping 36,964 (~19 MiB), Games 33,715 (~17 MiB); most hold a few thousand or fewer.
-  - *Adult is left out*: about 4.6 million names (UT1's own page, 2026-10-08), about 2.3 GiB held by
+    an estimate, at about 820 bytes a name, as measured on an XGS 3300 with OPNsense 26.7.9
+    (2026-11-19): Unbound held 265 MiB with Phishing and Malware's 241,045 names and 73 MiB with none,
+    each 90 seconds after a restart (818 bytes a name); while it reloads a changed list it holds the old
+    and the new for a moment (344 MiB at the peak, measured every second). The largest on 2026-11-19:
+    Phishing and Malware 241,045 names (~189 MiB), the three Proxies 109,793 each, the same names
+    (~86 MiB), Gambling 95,180 (~74 MiB), Job search 60,740 (~47 MiB), Shopping 36,964 (~29 MiB), Games
+    33,715 (~26 MiB); most hold a few thousand or fewer.
+  - *Adult is left out*: about 4.6 million names (UT1's own page, 2026-10-08), about 3.5 GiB held by
     Unbound's module - too much for a firewall. The page shows it greyed, with that reason; the model
     does not offer it, and `categories.py` and the handler refuse it whatever config.xml says. Any
     archive of more than a million names is refused too.

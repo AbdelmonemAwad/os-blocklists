@@ -120,8 +120,8 @@ namespace {
     check(!isset($options['adult']), 'CategoryField: adult never offered');
     check(count($options) === count($catalogue) - 1, sprintf('CategoryField: every other shipped category offered (%d)', count($options)));
     check(($options['gambling'] ?? '') === sprintf('Gambling (gambling): about %s names, %s MiB',
-        number_format($catalogue['gambling']['names']), number_format(round($catalogue['gambling']['names'] * 527 / 1048576))),
-        'CategoryField: an option says its names and the memory they take, at 527 bytes a name: ' . ($options['gambling'] ?? ''));
+        number_format($catalogue['gambling']['names']), number_format(round($catalogue['gambling']['names'] * 820 / 1048576))),
+        'CategoryField: an option says its names and the memory they take, at 820 bytes a name: ' . ($options['gambling'] ?? ''));
     check(strpos($options['dialer'] ?? '', 'under 1 MiB') !== false, 'CategoryField: a small one, under 1 MiB: ' . ($options['dialer'] ?? ''));
     $labels = array_values($options);
     $sorted = $labels;
