@@ -210,14 +210,17 @@
                     memory: function (column, row) {
                         return row.memory === null ? '-' : '~ ' + size(row.memory);
                     },
+                    // a cell of the grid keeps to one line and cuts it with an ellipsis: adult's reason (decision
+                    // d2: shown with its reason) and a category's state are wrapped instead, so they are read whole
                     state: function (column, row) {
                         if (row.refused) {
-                            return '<span class="text-muted">' + "{{ lang._('cannot be chosen') }}" + ': ' + row.refused + '</span>';
+                            return '<div class="text-muted" style="white-space: normal;">' + "{{ lang._('cannot be chosen') }}" + ': ' + row.refused + '</div>';
                         }
                         if (!row.chosen) {
                             return '<span class="text-muted">' + "{{ lang._('not chosen') }}" + '</span>';
                         }
-                        return (row.applied ? "{{ lang._('applied') }}" : "{{ lang._('not applied') }}") + (row.state ? ': ' + row.state : '');
+                        return '<div style="white-space: normal;">' + (row.applied ? "{{ lang._('applied') }}" : "{{ lang._('not applied') }}") +
+                            (row.state ? ': ' + row.state : '') + '</div>';
                     }
                 }
             }
@@ -373,14 +376,14 @@
             } else {
                 $.each(cats.held || [], function (i, c) {
                     $list.append($('<li/>').text(plain("{{ lang._('Web category') }}" + ' ' + c.name + ' (' + c.id + ')' +
-                        (c.entry !== data.query ? ', ' + "{{ lang._('as a name under') }}" + ' ' + c.entry : '') +
+                        (c.entry !== data.query ? "{{ lang._(', as a name under %s') }}".replace('%s', c.entry) : '') +
                         (c.exception ? ' - ' + "{{ lang._('let through by the exception') }}" + ' ' + c.exception : ''))));
                 });
                 /* the policy of the web categories with its entry; a policy of the owner's by its description only */
                 $.each(unbound.held || [], function (i, u) {
                     $list.append($('<li/>').text(plain("{{ lang._('Unbound DNS blocklist') }}" + ': ' + (u.mine ?
                         "{{ lang._('the policy of the web categories') }}" +
-                            (u.entry !== data.query ? ', ' + "{{ lang._('as a name under') }}" + ' ' + u.entry : '') +
+                            (u.entry !== data.query ? "{{ lang._(', as a name under %s') }}".replace('%s', u.entry) : '') +
                             (u.passes ? ' - ' + "{{ lang._('let through by an exception') }}" : '') :
                         "{{ lang._('a policy of Unbound DNS: Blocklists') }}" + (u.description ? ' "' + u.description + '"' : '')))));
                 });
