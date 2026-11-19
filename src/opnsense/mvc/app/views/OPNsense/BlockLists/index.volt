@@ -3,8 +3,8 @@
  # Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
  #
  # Firewall: Block Lists (XGS: Block Lists when os-xgs-npu is installed) - the address lists, the
- # countries, the DNS lists, UT1's web categories and the JA4 fingerprints in one place, with what each
- # blocked and cut, and a lookup of where a name or an address is held.
+ # countries, the DNS lists, UT1's web categories, the JA4 fingerprints and what the IPS drops in one
+ # place, with what each blocked and cut, and a lookup of where a name or an address is held.
  #}
 
 <style>
@@ -27,7 +27,8 @@
        the difference; wide screens never need to scroll it sideways. */
     @media (min-width: 768px) {
         #grid-lists .tabulator-tableholder, #grid-dns .tabulator-tableholder,
-        #grid-seen .tabulator-tableholder, #grid-categories .tabulator-tableholder { overflow-x: hidden; }
+        #grid-seen .tabulator-tableholder, #grid-categories .tabulator-tableholder,
+        #grid-ids .tabulator-tableholder { overflow-x: hidden; }
     }
 </style>
 
@@ -156,6 +157,11 @@
                 (web.error || web.message || "{{ lang._('not run yet') }}")));
             $('#bl-cat-total').text(plain(webApplied ? count(web.names) + ' ' + "{{ lang._('names at the most') }}" + ', ' +
                 size(web.memory) + ' ' + "{{ lang._('in Unbound, an estimate') }}" : '-'));
+
+            /* the IPS drops tab: why nothing is entered, where something keeps it; how many are held */
+            const ids = data.ids || {};
+            $('#bl-ids-problem').text(plain(ids.problem || '')).toggle(!!(ids.on && ids.problem));
+            $('#bl-ids-line').text(plain(ids.error || ids.message || "{{ lang._('not run yet') }}"));
         }
 
         function refresh() {
@@ -226,6 +232,39 @@
             }
         });
 
+        /* What the IPS drops (ff-10): each address held, its last drop and signature, until when, and a
+           button to take it out now. An address is the only value put into an attribute, and only one
+           made of an address's characters. */
+        $('#grid-ids').UIBootgrid({
+            search: '/api/blocklists/service/search_ids',
+            options: {
+                selection: false,
+                formatters: {
+                    address: function (column, row) {
+                        return '<code>' + row.address + '</code>';
+                    },
+                    signature: function (column, row) {
+                        return (row.sid ? '<code>' + row.sid + '</code> ' : '') + row.msg;
+                    },
+                    remove: function (column, row) {
+                        if (!/^[0-9A-Fa-f:.]+$/.test(row.address)) {
+                            return '';
+                        }
+                        return '<button type="button" class="btn btn-xs btn-default bl-ids-remove" data-address="' + row.address +
+                            '" title="' + "{{ lang._('Take it out now') }}" + '"><i class="fa fa-fw fa-trash-o"></i></button>';
+                    }
+                }
+            }
+        });
+        $('#grid-ids').on('click', '.bl-ids-remove', function () {
+            ajaxCall('/api/blocklists/service/ids_remove', {'address': $(this).attr('data-address')}, function (data) {
+                $('#bl-ids-result').attr('class', data && data.removed ? 'text-muted' : 'text-warning')
+                    .text(plain(data && typeof data.message === 'string' ? data.message : "{{ lang._('No answer could be read.') }}")).show();
+                $('#grid-ids').bootgrid('reload');
+                refresh();
+            });
+        });
+
         $('#grid-dns').UIBootgrid({
             search: '/api/blocklists/service/search_dns',
             options: {
@@ -283,6 +322,8 @@
                 $('#grid-dns').bootgrid('reload');
             } else if (tab === '#categories') {
                 $('#grid-categories').bootgrid('reload');
+            } else if (tab === '#ids') {
+                $('#grid-ids').bootgrid('reload');
             } else if (tab === '#ja4' && seen_open) {
                 $('#grid-seen').bootgrid('reload');
             }
@@ -432,6 +473,7 @@
     <li><a data-toggle="tab" href="#dns">{{ lang._('DNS') }}</a></li>
     <li><a data-toggle="tab" href="#categories">{{ lang._('Web categories') }}</a></li>
     <li><a data-toggle="tab" href="#ja4">{{ lang._('JA4') }}</a></li>
+    <li><a data-toggle="tab" href="#ids">{{ lang._('IPS drops') }}</a></li>
     <li><a data-toggle="tab" href="#lookup">{{ lang._('Lookup') }}</a></li>
     <li><a data-toggle="tab" href="#settings">{{ lang._('Settings') }}</a></li>
 </ul>
@@ -544,6 +586,30 @@
                 <tbody></tbody>
                 <tfoot></tfoot>
             </table>
+        </div>
+    </div>
+    <div id="ids" class="tab-pane">
+        <div id="bl-ids-problem" class="alert alert-warning" role="alert" style="display: none; margin: 15px 15px 0;"></div>
+        <div style="padding: 15px 15px 5px;">
+            {{ lang._('IPS drops') }}: <span id="bl-ids-line">-</span>
+        </div>
+        <div style="padding: 0 15px 5px;"><span id="bl-ids-result" style="display: none;"></span></div>
+        <table id="grid-ids" class="table table-condensed table-hover table-striped table-responsive">
+            <thead>
+                <tr>
+                    <th data-column-id="address" data-formatter="address" data-type="string" data-identifier="true" data-width="14em">{{ lang._('Address') }}</th>
+                    <th data-column-id="last" data-type="string" data-width="11em">{{ lang._('Last dropped') }}</th>
+                    <th data-column-id="until" data-type="string" data-width="11em">{{ lang._('Held until') }}</th>
+                    <th data-column-id="count" data-type="numeric" data-width="6em">{{ lang._('Drops') }}</th>
+                    <th data-column-id="msg" data-formatter="signature" data-type="string">{{ lang._('Signature') }}</th>
+                    <th data-column-id="commands" data-formatter="remove" data-sortable="false" data-width="5em"></th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+        </table>
+        <div class="text-muted" style="padding: 0 15px 15px;">
+            {{ lang._('The sources of what the Intrusion Detection IPS policy dropped over TCP, each blocked by this page and its open connections cut, until the time after its last drop is over. Set in Settings: Block what the IPS drops, Keep an address and Outside addresses only. The list starts empty after a reboot where /var is kept in memory.') }}
         </div>
     </div>
     <div id="lookup" class="tab-pane">

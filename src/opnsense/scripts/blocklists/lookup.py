@@ -99,8 +99,14 @@ def tables(address):
             continue
         if held:
             feed = feeds.get(table[len(cut.PREFIX):]) if isinstance(feeds.get(table[len(cut.PREFIX):]), dict) else {}
-            out['held'].append({'alias': table, 'list': str(feed.get('name') or '') or (
-                T('countries') if table == cut.PREFIX + 'countries' else '')})
+            # a publisher's list by its own name; the plugin's own two by a text the page translates
+            if table == cut.PREFIX + 'ids':
+                name = T('IPS drops')
+            elif table == cut.PREFIX + 'countries':
+                name = T('countries')
+            else:
+                name = str(feed.get('name') or '')
+            out['held'].append({'alias': table, 'list': name})
     return out
 
 
