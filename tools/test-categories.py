@@ -888,6 +888,89 @@ def texts_tests(status, page):
           'texts: every msgid the page is given is in source.json: %r' % (sorted({t for t in found if isinstance(t, str)} - catalogued),))
 
 
+def removal_tests(tmp):
+    """The removers' rebuild of Unbound's blocklist, their own lines run by sh with lockf, configctl and the
+    files stood in for (2026-11-19 review): a rebuild of OPNsense's already running - one that read the
+    handler before it went - waited for before each try, so the policy it writes back as it ends is taken
+    out; a rebuild that left at once (another running) tried again; five at the most, then said."""
+    import shutil as _shutil
+    import subprocess
+    shell = _shutil.which('sh')
+    if shell is None:
+        print('  (removal_tests: no sh here - not run)')
+        return
+    policy = categories.POLICY
+    log, dnsbl, inflight, skips = (os.path.join(tmp, n) for n in ('log', 'dnsbl.json', 'inflight', 'skips'))
+    lock = os.path.join(tmp, 'core.lock')
+    holding = '{"data":{"casino.example":[{"bl":"ut1_gambling","wildcard":true,"idx":"%s"}]},"config":{"%s":{}}}' % (policy, policy)
+    fakes = {
+        # lockf -k -t 900 <lock> true: a rebuild running ends now, writing the policy back where it read
+        # the handler before it went (inflight)
+        'lockf': '#!/bin/sh\necho "lockf $*" >> "%s"\n[ -f "%s" ] && { printf \'%%s\' \'%s\' > "%s"; rm -f "%s"; }\nexit 0\n'
+                 % (log, inflight, holding, dnsbl, inflight),
+        # configctl unbound dnsbl: leaves at once while skips says so (another update held its lock), else
+        # rebuilds without the handler: no policy left
+        'configctl': '#!/bin/sh\necho "configctl $*" >> "%s"\nn=$(cat "%s" 2> /dev/null || echo 0)\n'
+                     'if [ "$n" -gt 0 ]; then echo $((n - 1)) > "%s"; exit 0; fi\n: > "%s"\n' % (log, skips, skips, dnsbl),
+    }
+    for name, text in fakes.items():
+        path = os.path.join(tmp, name)
+        with open(path, 'w', newline='\n') as fh:
+            fh.write(text)
+        os.chmod(path, 0o755)
+
+    def loop(script):
+        text = open(os.path.join(ROOT, script), encoding='utf-8').read()
+        start = text.index('\ntries=0\n') + 1
+        end = text.index('\ndone\n', start) + len('\ndone\n')
+        body = text[start:end]
+        for real, fake in (('/usr/bin/lockf', os.path.join(tmp, 'lockf')),
+                           ('/tmp/unbound-download_blocklists.tmp', lock),
+                           ('/var/unbound/data/dnsbl.json', dnsbl),
+                           ('/usr/local/sbin/configctl', os.path.join(tmp, 'configctl'))):
+            body = body.replace(real, fake.replace(os.sep, '/'))
+        if 'configctl unbound dnsbl' in body and os.path.join(tmp, 'configctl').replace(os.sep, '/') not in body:
+            body = body.replace('configctl unbound dnsbl', os.path.join(tmp, 'configctl').replace(os.sep, '/') + ' unbound dnsbl')
+        return body
+
+    for script in ('install/uninstall.sh', 'pkg/post-deinstall.sh'):
+        body = loop(script)
+
+        def run(start, running=False, skip=0):
+            for path in (log, inflight, skips):
+                if os.path.exists(path):
+                    os.unlink(path)
+            with open(dnsbl, 'w') as fh:
+                fh.write(start)
+            if running:
+                open(inflight, 'w').close()
+            with open(skips, 'w') as fh:
+                fh.write(str(skip))
+            out = subprocess.run([shell, '-c', body], capture_output=True, text=True, timeout=60)
+            calls = open(log).read().splitlines() if os.path.exists(log) else []
+            return out.stdout, calls, open(dnsbl).read()
+
+        # dnsbl.json clean as the removal begins, but a rebuild running that read the handler before it went:
+        # without the wait the loop saw it clean and left, and that rebuild wrote the policy back
+        out, calls, left = run('', running=True)
+        check(policy not in left and calls[:1] and calls[0].startswith('lockf -k -t 900 ') and calls.count('configctl unbound dnsbl') == 1
+              and calls[-1].startswith('lockf'),
+              '%s: a rebuild running wrote the policy back as it ended - waited for, rebuilt after, gone: %r' % (script, calls))
+        out, calls, left = run(holding, running=True)
+        check(policy not in left and calls.count('configctl unbound dnsbl') == 1,
+              '%s: the policy there and a rebuild running - its end waited for, one rebuild, gone: %r' % (script, calls))
+        out, calls, left = run(holding, skip=2)
+        check(policy not in left and calls.count('configctl unbound dnsbl') == 3 and out == '',
+              '%s: two rebuilds that left at once (another running) - tried again, gone: %r' % (script, calls))
+        out, calls, left = run(holding, skip=99)
+        check(policy in left and calls.count('configctl unbound dnsbl') == 5 and 'still holds' in out
+              and 'Unbound DNS: Blocklists' in out,
+              '%s: five rebuilds and the policy still there - stopped, and said: %r' % (script, out))
+        out, calls, left = run('')
+        check(calls == ['lockf -k -t 900 %s true' % lock.replace(os.sep, '/')] and out == '',
+              '%s: the policy not there - waited once, nothing rebuilt: %r' % (script, calls))
+
+
 def quiet_tests(tmp):
     """What the README says of a firewall where no category is chosen (2026-11-19 review): no one
     contacted; where none was ever chosen nothing made; once what was applied is taken out, nothing
@@ -1122,6 +1205,8 @@ def main():
         unpack_tests(os.path.join(tmp, 'unpack'))
         os.makedirs(os.path.join(tmp, 'run'))
         run_tests(os.path.join(tmp, 'run'))
+        os.makedirs(os.path.join(tmp, 'removal'))
+        removal_tests(os.path.join(tmp, 'removal'))
         os.makedirs(os.path.join(tmp, 'quiet'))
         quiet_tests(os.path.join(tmp, 'quiet'))
         deadline_tests()

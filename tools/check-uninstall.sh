@@ -20,7 +20,9 @@
 # imported, not run (no #! line), leaves what Python compiled of it in __pycache__ beside it, which pkg
 # does not know of: both must remove that too, by its name. And a handler put into Unbound's folder
 # leaves its policy in Unbound's blocklist data until that is rebuilt: both must rebuild it
-# (configctl unbound dnsbl).
+# (configctl unbound dnsbl), and first wait for a rebuild of OPNsense's already running - one that read
+# the handler before it went writes the policy back as it ends, and a rebuild asked for meanwhile leaves
+# at once on its lock - with lockf -k on that lock (CORE_LOCK): -k, or lockf removes OPNsense's file.
 #
 #   tools/check-uninstall.sh [repository root]
 set -eu
@@ -30,6 +32,7 @@ P="${ROOT}/pkg/post-deinstall.sh"
 OWN="/usr/local/opnsense/scripts/blocklists /usr/local/opnsense/mvc/app/models/OPNsense/BlockLists
 /usr/local/opnsense/mvc/app/controllers/OPNsense/BlockLists /usr/local/opnsense/mvc/app/views/OPNsense/BlockLists"
 UNBOUND=/usr/local/opnsense/scripts/unbound/blocklists
+CORE_LOCK=/tmp/unbound-download_blocklists.tmp
 
 own() { # <target path>: whether it is in one of the plugin's own folders
     for d in ${OWN}; do
@@ -72,10 +75,19 @@ for f in $(cd "${ROOT}" && find src -type f | sort); do
         esac
         if [ "$(dirname "${target}")" = "${UNBOUND}" ]; then
             for script in "${U}" "${P}"; do
-                grep -qE '^[^#]*configctl unbound dnsbl' "${script}" || {
+                rebuild=$(grep -nE '^[^#]*configctl unbound dnsbl' "${script}" | head -n1 | cut -d: -f1)
+                wait=$(grep -nE "^[^#]*lockf -k -t [0-9]+ ${CORE_LOCK} " "${script}" | head -n1 | cut -d: -f1)
+                if [ -z "${rebuild}" ]; then
                     echo "${script#${ROOT}/} leaves ${target}'s policy in Unbound's blocklist: no configctl unbound dnsbl"
                     bad=1
-                }
+                elif [ -z "${wait}" ] || [ "${wait}" -gt "${rebuild}" ]; then
+                    echo "${script#${ROOT}/} rebuilds Unbound's blocklist without first waiting for one running (lockf -k -t on ${CORE_LOCK})"
+                    bad=1
+                fi
+                if grep -E "^[^#]*lockf " "${script}" | grep -F "${CORE_LOCK}" | grep -vqE 'lockf -k '; then
+                    echo "${script#${ROOT}/} takes ${CORE_LOCK} with lockf without -k: lockf would remove OPNsense's file"
+                    bad=1
+                fi
             done
         fi
         continue
