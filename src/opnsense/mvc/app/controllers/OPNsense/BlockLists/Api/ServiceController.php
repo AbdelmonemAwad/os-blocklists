@@ -8,6 +8,7 @@
 namespace OPNsense\BlockLists\Api;
 
 use OPNsense\Base\ApiControllerBase;
+use OPNsense\BlockLists\BlockLists;
 use OPNsense\Core\Backend;
 
 class ServiceController extends ApiControllerBase
@@ -18,9 +19,26 @@ class ServiceController extends ApiControllerBase
         return is_array($result) ? $result : ['error' => gettext('No answer could be read.')];
     }
 
+    /**
+     * a msgid of categories.json (a category's name or description) translated, or '' kept ''
+     */
+    private function catalogued($text)
+    {
+        $text = (string)$text;
+        return $text === '' ? '' : gettext($text);
+    }
+
+    /**
+     * the page's status; the web categories' line made a text of the page's language (BlockLists::text())
+     */
     public function statusAction()
     {
-        return $this->json('status');
+        $status = $this->json('status');
+        if (isset($status['categories']) && is_array($status['categories'])) {
+            $status['categories']['message'] = BlockLists::text($status['categories']['message'] ?? []);
+            unset($status['categories']['rows'], $status['categories']['refused']);
+        }
+        return $status;
     }
 
     public function seenAction()
@@ -81,17 +99,17 @@ class ServiceController extends ApiControllerBase
         foreach (($this->json('status')['categories']['rows'] ?? []) as $row) {
             $rows[] = [
                 'id' => (string)($row['id'] ?? ''),
-                'name' => (string)($row['name'] ?? ''),
-                'description' => (string)($row['description'] ?? ''),
+                'name' => $this->catalogued($row['name'] ?? ''),
+                'description' => $this->catalogued($row['description'] ?? ''),
                 'use' => ($row['use'] ?? '') === 'allow' ? 'allow' : 'block',
                 'names' => isset($row['names']) ? (int)$row['names'] : null,
                 'approximate' => !empty($row['approximate']),
                 'counted' => !empty($row['counted']),
                 'memory' => isset($row['memory']) ? (int)$row['memory'] : null,
-                'refused' => (string)($row['refused'] ?? ''),
+                'refused' => BlockLists::text($row['refused'] ?? ''),
                 'chosen' => !empty($row['chosen']),
                 'applied' => !empty($row['applied']),
-                'state' => (string)($row['state'] ?? ''),
+                'state' => BlockLists::text($row['state'] ?? ''),
             ];
         }
         return $this->searchRecordsetBase($rows, ['id', 'name', 'description', 'state']);
@@ -116,7 +134,25 @@ class ServiceController extends ApiControllerBase
             return ['error' => gettext('Enter a name, such as example.com, or an address.')];
         }
         $result = json_decode((new Backend())->configdpRun('blocklists lookup', [$query]), true);
-        return is_array($result) ? $result : ['error' => gettext('No answer could be read.')];
+        if (!is_array($result)) {
+            return ['error' => gettext('No answer could be read.')];
+        }
+        /* the script's texts in the page's language: its errors, and the categories' names */
+        if (isset($result['error'])) {
+            $result['error'] = BlockLists::text($result['error']);
+        }
+        foreach (['tables', 'categories', 'unbound'] as $part) {
+            if (isset($result[$part]['errors']) && is_array($result[$part]['errors'])) {
+                $result[$part]['errors'] = array_map([BlockLists::class, 'text'], $result[$part]['errors']);
+            }
+        }
+        foreach (($result['categories']['held'] ?? []) as $i => $held) {
+            $result['categories']['held'][$i]['name'] = $this->catalogued($held['name'] ?? '');
+        }
+        foreach (($result['tables']['held'] ?? []) as $i => $held) {
+            $result['tables']['held'][$i]['list'] = BlockLists::text($held['list'] ?? '');
+        }
+        return $result;
     }
 
     /**

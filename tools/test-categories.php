@@ -7,8 +7,10 @@
  * The web categories on the PHP side (2026-11-19): the model's CategoryField offers the categories of the
  * shipped categories.json and those UT1's own catalogue adds, never adult and never a key that is not a
  * category name, each with its size; the exceptions' mask (BlockLists.xml) takes names and nothing else;
- * and the Lookup tab's controller takes a host name or an address and nothing else. OPNsense's
- * BaseListField is stood in for; no OPNsense needed:
+ * and the Lookup tab's controller takes a host name or an address and nothing else. The page's texts
+ * of the scripts (T()) and of the field are given in the page's language, a translation whose %s do not
+ * fit falling back to the English (BlockLists::text(), CategoryField). OPNsense's BaseListField and
+ * BaseModel are stood in for, and gettext by a catalogue of the test's own; no OPNsense needed:
  *
  *   php tools/test-categories.php
  */
@@ -31,8 +33,31 @@ namespace OPNsense\Base\FieldTypes {
     }
 }
 
+namespace OPNsense\Base {
+    /* OPNsense's BaseModel: nothing of it is used by BlockLists::text() */
+    class BaseModel
+    {
+    }
+}
+
+namespace OPNsense\BlockLists {
+    /* gettext as the classes of these namespaces call it, with a catalogue of the test's own */
+    function gettext($text)
+    {
+        return $GLOBALS['translations'][$text] ?? $text;
+    }
+}
+
+namespace OPNsense\BlockLists\FieldTypes {
+    function gettext($text)
+    {
+        return $GLOBALS['translations'][$text] ?? $text;
+    }
+}
+
 namespace {
     $root = dirname(__DIR__);
+    $GLOBALS['translations'] = [];
     $failed = 0;
     $checks = 0;
 
@@ -47,8 +72,40 @@ namespace {
     }
 
     require $root . '/src/opnsense/mvc/app/models/OPNsense/BlockLists/FieldTypes/CategoryField.php';
+    require $root . '/src/opnsense/mvc/app/models/OPNsense/BlockLists/BlockLists.php';
 
+    use OPNsense\BlockLists\BlockLists;
     use OPNsense\BlockLists\FieldTypes\CategoryField;
+
+    /* the scripts' texts, T(), made the page's: English with no translation, then translated */
+    $t = function ($text, ...$args) {
+        return ['text' => $text, 'args' => $args];
+    };
+    $state = [$t('%s names, fetched %s', '95,180', '2026-11-19 03:41 UTC'), $t('the copy of UT1 of %s', 'Wed, 18 Nov 2026'),
+        $t('not fetched at %s: %s - the last copy is kept', '2026-11-19 05:41 UTC', $t('UT1 answered HTTP %s', 500))];
+    check(BlockLists::text($state) === '95,180 names, fetched 2026-11-19 03:41 UTC; the copy of UT1 of Wed, 18 Nov 2026; '
+        . 'not fetched at 2026-11-19 05:41 UTC: UT1 answered HTTP 500 - the last copy is kept',
+        'text: a list of T(), nested ones filled in, in English: ' . BlockLists::text($state));
+    $GLOBALS['translations'] = [
+        '%s names, fetched %s' => '<%s> N <%s>',
+        'the copy of UT1 of %s' => 'C %s %s',               /* one %s too many: the English is used */
+        'UT1 answered HTTP %s' => 'H %s',
+        'not fetched at %s: %s - the last copy is kept' => 'F %s : %s K',
+        'Gambling' => 'G-ar', '%s (%s): about %s names, %s' => '[%s|%s|%s|%s]', '%s MiB' => '%s M',
+        'under 1 MiB' => '<1M', 'Dialers' => 'D-ar', '%s (%s)' => '{%s/%s}',
+    ];
+    check(BlockLists::text($state) === '<95,180> N <2026-11-19 03:41 UTC>; the copy of UT1 of Wed, 18 Nov 2026; '
+        . 'F 2026-11-19 05:41 UTC : H 500 K',
+        'text: translated, nested ones too; a translation whose %s do not fit gives the English: ' . BlockLists::text($state));
+    check(BlockLists::text('') === '' && BlockLists::text($t('')) === '' && BlockLists::text(null) === ''
+        && BlockLists::text(7) === '7' && BlockLists::text([$t('UT1 answered HTTP %s')]) === 'UT1 answered HTTP %s',
+        'text: nothing, an empty msgid, a number; a T() missing its value - its English as it is, no error');
+    $label = CategoryField::catalogueOptions($root . '/src/opnsense/scripts/blocklists/categories.json', '/nonexistent')['gambling'];
+    check(preg_match('/^\[G-ar\|gambling\|[0-9,]+\|[0-9,]+ M\]$/', $label) === 1,
+        'CategoryField: an option in the page\'s language - its name, its format, its size: ' . $label);
+    check(strpos(CategoryField::catalogueOptions($root . '/src/opnsense/scripts/blocklists/categories.json', '/nonexistent')['dialer'],
+        '[D-ar|dialer|') === 0, 'CategoryField: a small one translated too');
+    $GLOBALS['translations'] = [];
 
     $shipped = $root . '/src/opnsense/scripts/blocklists/categories.json';
     $tmp = sys_get_temp_dir() . '/blocklists-categories-php-' . getmypid();

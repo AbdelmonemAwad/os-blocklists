@@ -197,13 +197,14 @@ def main():
                     'example.com:443', '[2001:db8::1]', 'fe80::1%em0', '192.0.2.1/24', '*.example.com', 'ex\u00e4mple.com',
                     'a..b.com', '.example.com', 'a-.com', '-a.com', 'x' * 64 + '.com', ('a.' * 127) + 'com', None, 7):
             result = lookup.lookup(bad)
-            check(result == {'error': 'not a name or an address'}, 'refused: %r -> %r' % (bad, result))
+            check(result == {'error': lookup.categories.T('not a name or an address')}, 'refused: %r -> %r' % (bad, result))
         check(pf.calls == [], 'nothing refused reached pfctl')
         for argv in ([], ['a.example', 'b.example']):
             out = io.StringIO()
             with redirect_stdout(out):
                 lookup.main(argv)
-            check(json.loads(out.getvalue()) == {'error': 'not a name or an address'}, 'main %r: refused' % (argv,))
+            check(json.loads(out.getvalue()) == {'error': {'text': 'not a name or an address', 'args': []}},
+                  'main %r: refused, a text for the page' % (argv,))
         out = io.StringIO()
         with redirect_stdout(out):
             lookup.main(['nothing.example.net'])

@@ -77,9 +77,10 @@
                 return '-';
             }
             if (bytes >= 1073741824) {
-                return (bytes / 1073741824).toFixed(1) + ' GiB';
+                return plain("{{ lang._('%s GiB') }}").replace('%s', (bytes / 1073741824).toFixed(1));
             }
-            return bytes < 1048576 ? '< 1 MiB' : Math.round(bytes / 1048576).toLocaleString() + ' MiB';
+            return bytes < 1048576 ? plain("{{ lang._('under 1 MiB') }}") :
+                plain("{{ lang._('%s MiB') }}").replace('%s', Math.round(bytes / 1048576).toLocaleString());
         }
 
         /* The abuse.ch Auth-Key's field (ThreatFox): the page is never given the key - OPNsense's

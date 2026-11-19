@@ -29,6 +29,24 @@ class CategoryField extends BaseListField
     private static $cache = null;
 
     /**
+     * a translated format filled, or the English one where the translation's %s do not fit
+     */
+    private static function fill($format, $english, ...$args)
+    {
+        foreach ([$format, $english] as $candidate) {
+            try {
+                $result = @vsprintf($candidate, $args);
+            } catch (\Throwable $e) {
+                $result = false;
+            }
+            if (is_string($result)) {
+                return $result;
+            }
+        }
+        return $english;
+    }
+
+    /**
      * @return array id => label, sorted by label
      */
     public static function catalogueOptions($shipped = null, $fetched = null)
@@ -55,15 +73,17 @@ class CategoryField extends BaseListField
                 $name = preg_replace('/[^\x20-\x7e\x{a0}-\x{ffff}]/u', '', str_replace(['<', '>'], ' ', (string)($entry['name'] ?? '')));
                 $name = trim(preg_replace('/\s+/u', ' ', $name ?? '') ?? '');
                 $name = function_exists('mb_substr') ? mb_substr($name, 0, 80) : substr($name, 0, 80);
-                $label = sprintf('%s (%s)', $name !== '' ? $name : $id, $id);
+                /* in the page's language: the shipped names are msgids of the catalogue, as these texts are */
+                $shown = $name !== '' ? gettext($name) : $id;
                 $names = $entry['names'] ?? null;
                 if (is_int($names) && $names >= 0) {
                     $bytes = $names * $per_name;
-                    $label .= sprintf(
-                        ': about %s names, %s',
-                        number_format($names),
-                        $bytes < 1048576 ? 'under 1 MiB' : number_format(round($bytes / 1048576)) . ' MiB'
-                    );
+                    $size = $bytes < 1048576 ? gettext('under 1 MiB') :
+                        self::fill(gettext('%s MiB'), '%s MiB', number_format(round($bytes / 1048576)));
+                    $label = self::fill(gettext('%s (%s): about %s names, %s'), '%s (%s): about %s names, %s',
+                        $shown, $id, number_format($names), $size);
+                } else {
+                    $label = self::fill(gettext('%s (%s)'), '%s (%s)', $shown, $id);
                 }
                 $found[$id] = $label;
             }

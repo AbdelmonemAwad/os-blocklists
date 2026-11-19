@@ -41,6 +41,11 @@ Unbound's blocklist rebuilt without it.
 
 Never fails its caller: prints one JSON object and exits 0; what it could not do is in the answer, in
 STATUS (the page shows it) and in the system log, under blocklists.
+
+TEXTS FOR THE PAGE are kept as T(msgid, args...): the English msgid and what fills it, which the page's
+controller translates with OPNsense's catalogue (gettext) and the system log reads in English
+(english()). Every msgid is a literal of T() here, so tools/check-strings.py finds it and asks for its
+Arabic; the categories' names, descriptions and reasons come from categories.json, which it reads too.
 """
 import fcntl
 import hashlib
@@ -104,8 +109,36 @@ EXCEPTION = re.compile(r'^(?=.{1,253}\Z)([a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?\.
 TEXT = re.compile(r'[^\x20-\x7e\u00a0-\uffff]')
 
 
+def T(text, *args):
+    """A text for the page: a msgid of the catalogue and what fills its %s, each a value or a T()."""
+    return {'text': text, 'args': list(args)}
+
+
+def data_text(text):
+    """A text of categories.json for the page - a category's name, description or reason - as a T()
+    whose msgid is not a literal here: tools/check-strings.py takes those from categories.json."""
+    return {'text': str(text or ''), 'args': []}
+
+
+def english(value):
+    """A T(), or a list of them (one line, '; ' between), as English: for the log and the command line."""
+    if isinstance(value, list):
+        return '; '.join(english(v) for v in value)
+    if isinstance(value, dict) and isinstance(value.get('text'), str):
+        args = tuple(english(a) for a in (value.get('args') or []))
+        try:
+            return value['text'] % args
+        except (TypeError, ValueError):
+            return value['text']
+    return str(value)
+
+
 class Failed(Exception):
-    """A download that failed, broke off, or was not an archive of UT1's."""
+    """A download that failed, broke off, or was not an archive of UT1's; text: what the page says, a T()."""
+
+    def __init__(self, text):
+        self.text = text
+        super().__init__(english(text))
 
 
 def say(message):
@@ -224,24 +257,25 @@ def exceptions(text):
 
 
 def why_not(cid, entry):
-    """Why a category chosen is not taken, or '' where it is."""
+    """Why a category chosen is not taken, a T(), or None where it is."""
     if not ID.match(cid):
-        return 'not a category name'
+        return T('not a category name')
     if cid in REFUSED:
-        return 'cannot be chosen: ' + REFUSED[cid]
+        return T('cannot be chosen: %s', data_text(REFUSED[cid]))
     if entry is None:
-        return 'not a category of UT1\'s catalogue'
+        return T('not in the catalogue of UT1')
     if entry['refused']:
-        return 'cannot be chosen: ' + entry['refused']
-    return ''
+        return T('cannot be chosen: %s', data_text(entry['refused']))
+    return None
 
 
 URLOPEN = urllib.request.urlopen
 
 
 def reason(e):
+    """What went wrong on the way: a T(), or the system's own words."""
     if isinstance(e, TimeoutError):
-        return 'no answer within %d s' % TIMEOUT
+        return T('no answer within %s s', TIMEOUT)
     if isinstance(e, urllib.error.URLError):
         return str(e.reason)
     return '%s: %s' % (type(e).__name__, e)
@@ -262,16 +296,16 @@ def download(url, spool, limit, validators=None):
         e.close()
         if code == 304:
             return 304, {}
-        raise Failed('UT1 answered HTTP %d' % code) from None
+        raise Failed(T('UT1 answered HTTP %s', code)) from None
     except (urllib.error.URLError, OSError, http.client.HTTPException, ValueError) as e:
-        raise Failed('UT1 not reached: %s' % reason(e)) from None
+        raise Failed(T('UT1 not reached: %s', reason(e))) from None
     size = 0
     with response:
         status = getattr(response, 'status', 200)
         if status == 304:
             return 304, {}
         if status != 200:
-            raise Failed('UT1 answered HTTP %s' % status)
+            raise Failed(T('UT1 answered HTTP %s', status))
         got = {}
         for header in ('Last-Modified', 'ETag'):
             value = response.headers.get(header) if response.headers is not None else None
@@ -279,16 +313,16 @@ def download(url, spool, limit, validators=None):
                 got[header] = value.strip()
         while True:
             if time.monotonic() > deadline:
-                raise Failed('not done within %d s' % DEADLINE)
+                raise Failed(T('not done within %s s', DEADLINE))
             try:
                 chunk = response.read(1 << 16)
             except (OSError, http.client.HTTPException, ValueError) as e:
-                raise Failed('the download broke off: %s' % reason(e)) from None
+                raise Failed(T('the download broke off: %s', reason(e))) from None
             if not chunk:
                 break
             size += len(chunk)
             if size > limit:
-                raise Failed('larger than %d MB' % (limit >> 20))
+                raise Failed(T('larger than %s MB', limit >> 20))
             spool.write(chunk)
     return 200, dict(got, size=size)
 
@@ -320,7 +354,7 @@ def unpack(spool, members, out):
     try:
         archive = tarfile.open(fileobj=spool, mode='r:gz')
     except (tarfile.TarError, OSError, EOFError, zlib.error) as e:
-        raise Failed('not a category archive (%s)' % e) from None
+        raise Failed(T('not a category archive (%s)', str(e))) from None
     taken, names, ipv4, dropped, count = None, 0, 0, 0, 0
     digest, seen = hashlib.sha256(), set()
     deadline = time.monotonic() + DEADLINE
@@ -329,15 +363,15 @@ def unpack(spool, members, out):
             for member in archive:
                 count += 1
                 if count > MEMBERS:
-                    raise Failed('more than %d members in the archive' % MEMBERS)
+                    raise Failed(T('more than %s members in the archive', MEMBERS))
                 if member.size > UNPACKED:
-                    raise Failed('its %s is larger than %d MB' % (member.name[:80], UNPACKED >> 20))
+                    raise Failed(T('its %s is larger than %s MB', member.name[:80], UNPACKED >> 20))
                 if member.name not in members:
                     continue
                 if taken is not None:
-                    raise Failed('two %s files in the archive' % member.name)
+                    raise Failed(T('two %s files in the archive', member.name))
                 if not member.isreg():
-                    raise Failed('its %s is not a plain file' % member.name)
+                    raise Failed(T('its %s is not a plain file', member.name))
                 taken = member.name
                 source = archive.extractfile(member)
                 for raw in lines(source):
@@ -345,7 +379,7 @@ def unpack(spool, members, out):
                         dropped += 1
                         continue
                     if names % 50000 == 0 and time.monotonic() > deadline:
-                        raise Failed('not read within %d s' % DEADLINE)
+                        raise Failed(T('not read within %s s', DEADLINE))
                     line = raw.decode('utf-8', 'replace').split('#', 1)[0].strip().lower()
                     if not line:
                         continue
@@ -366,14 +400,14 @@ def unpack(spool, members, out):
                     seen.add(line)
                     names += 1
                     if names > MAX_NAMES:
-                        raise Failed('more than %s names: larger than any category offered' % format(MAX_NAMES, ','))
+                        raise Failed(T('more than %s names: larger than any category offered', format(MAX_NAMES, ',')))
                     text = line + '\n'
                     out.write(text)
                     digest.update(text.encode())
     except (tarfile.TarError, OSError, EOFError, zlib.error) as e:
-        raise Failed('a damaged archive (%s)' % e) from None
+        raise Failed(T('a damaged archive (%s)', str(e))) from None
     if taken is None:
-        raise Failed('no %s in the archive' % ' or '.join(sorted(members)))
+        raise Failed(T('no %s in the archive', ' or '.join(sorted(members))))
     return names, ipv4, dropped, digest.hexdigest()
 
 
@@ -418,7 +452,10 @@ def fetch(archive, cids, st, now, keep):
                 except OSError:
                     pass
                 raise
-    except (Failed, OSError) as e:
+    except Failed as e:
+        st['error'] = e.text
+        return 'failed'
+    except OSError as e:
         st['error'] = str(e)
         return 'failed'
     st.pop('error', None)
@@ -480,12 +517,15 @@ def fetch_catalogue(st, now):
                 return
             spool.seek(0)
             entries = parse_catalogue(spool.read().decode('utf-8', 'replace'))
-    except (Failed, OSError) as e:
+    except Failed as e:
+        st['error'] = e.text
+        return
+    except OSError as e:
         st['error'] = str(e)
         return
     if len(entries) < 10:
         # UT1's site answers its maintenance page for global_usage now and then (2026-11-19)
-        st['error'] = 'not UT1\'s catalogue: %d categories in it' % len(entries)
+        st['error'] = T('not the catalogue of UT1: %s categories in it', len(entries))
         return
     save(CATALOGUE, {'fetched': now, 'categories': entries})
     st.pop('error', None)
@@ -513,31 +553,32 @@ def reload_unbound():
     try:
         r = subprocess.run([CONFIGCTL, 'unbound', 'dnsbl'], capture_output=True, text=True, timeout=RELOAD_TIMEOUT)
     except (OSError, subprocess.SubprocessError) as e:
-        return False, 'configctl could not be run: %s' % e
+        return False, T('configctl could not be run: %s', str(e))
     if r.returncode != 0:
-        return False, ('configctl unbound dnsbl failed: ' + (r.stderr or r.stdout or '').strip())[:200]
+        return False, T('configctl unbound dnsbl failed: %s', (r.stderr or r.stdout or '').strip()[:200])
     if mtime(DNSBL) == before:
-        return False, 'Unbound\'s blocklist was not written (another update running?): tried again at the next run'
+        return False, T('the Unbound blocklist was not written: tried again at the next run')
     return True, None
 
 
 def describe(archive, st):
-    """What the page says of an archive chosen."""
+    """What the page says of an archive chosen: a list of T()."""
     parts = []
     if st.get('fetched'):
-        parts.append('%s names, fetched %s' % (format(st.get('names') or 0, ','), stamp(st['fetched'])))
+        parts.append(T('%s names, fetched %s', format(st.get('names') or 0, ','), stamp(st['fetched'])))
         if st.get('last_modified'):
-            parts.append("UT1's copy of " + st['last_modified'])
+            parts.append(T('the copy of UT1 of %s', st['last_modified']))
         if st.get('checked', 0) > st['fetched']:
-            parts.append('unchanged at ' + stamp(st['checked']))
+            parts.append(T('unchanged at %s', stamp(st['checked'])))
     else:
-        parts.append('not fetched yet')
-    text = '; '.join(parts)
+        parts.append(T('not fetched yet'))
     if st.get('error'):
-        text += '; not fetched at %s: %s' % (stamp(st['tried']), st['error'])
+        error = st['error'] if isinstance(st['error'], (dict, str)) else str(st['error'])
         if st.get('fetched'):
-            text += ' - the last copy is kept'
-    return text
+            parts.append(T('not fetched at %s: %s - the last copy is kept', stamp(st['tried']), error))
+        else:
+            parts.append(T('not fetched at %s: %s', stamp(st['tried']), error))
+    return parts
 
 
 def run(now=None, apply=False):
@@ -552,10 +593,10 @@ def run(now=None, apply=False):
     before = json.dumps(status, sort_keys=True)
     conf = settings()
     if conf is None:
-        status['message'] = 'config.xml could not be read: nothing changed'
+        status['message'] = [T('config.xml could not be read: nothing changed')]
         if json.dumps(status, sort_keys=True) != before:
             save(STATUS, status)
-        return {'run': now, 'message': status['message']}
+        return {'run': now, 'message': english(status['message'])}
     entries = catalogue()
     chosen = conf['categories'] if conf['enabled'] else []
     wanted, refused = {}, {}
@@ -583,7 +624,7 @@ def run(now=None, apply=False):
         if due:
             outcomes[archive] = fetch(archive, wanted[archive], st, now, kept)
             if outcomes[archive] == 'failed':
-                say('%s not fetched: %s%s' % (archive, st['error'], ' - the last copy is kept' if kept else ''))
+                say('%s not fetched: %s%s' % (archive, english(st['error']), ' - the last copy is kept' if kept else ''))
 
     removed = []
     for archive in list(status['archives']):
@@ -612,7 +653,7 @@ def run(now=None, apply=False):
         status['reload'] = {'at': now, 'pending': not done}
         if error:
             status['reload']['error'] = error
-            say(error)
+            say(english(error))
         else:
             say('Unbound\'s blocklist rebuilt: %d categories applied' % len(applied))
 
@@ -621,28 +662,28 @@ def run(now=None, apply=False):
     status.update(refused=refused, applied=sorted(applied), exceptions=active['exceptions'])
     parts = []
     if not conf['enabled'] and conf['categories']:
-        parts.append('Block Lists is off: no category applied')
+        parts.append(T('Block Lists is off: no category applied'))
     elif applied:
-        parts.append('%d of %d categories chosen applied, %s names' % (
-            len(applied), len(chosen), format(sum((status['archives'][a].get('names') or 0) for a in set(applied.values())), ',')))
+        parts.append(T('%s of %s categories chosen applied, %s names', len(applied), len(chosen),
+                       format(sum((status['archives'][a].get('names') or 0) for a in set(applied.values())), ',')))
     elif chosen:
-        parts.append('no category applied yet')
+        parts.append(T('no category applied yet'))
     else:
-        parts.append('no category chosen')
-    if refused:
-        parts.append('not taken: ' + ', '.join('%s (%s)' % (cid[:64], why) for cid, why in sorted(refused.items())))
+        parts.append(T('no category chosen'))
+    for cid, why in sorted(refused.items()):
+        parts.append(T('%s not taken: %s', cid[:64], why))
     if applied and not conf['unbound']:
-        parts.append('Unbound DNS is off: the categories have no effect until it is the resolver')
+        parts.append(T('Unbound DNS is off: the categories have no effect until it is the resolver'))
     if applied and not os.path.isfile(HANDLER):
-        parts.append('the plugin\'s Unbound handler is missing: install the plugin again')
+        parts.append(T('the Unbound handler of the plugin is missing: install the plugin again'))
     if status['reload'].get('error'):
         parts.append(status['reload']['error'])
-    status['message'] = '; '.join(parts)
+    status['message'] = parts
     if json.dumps(status, sort_keys=True) != before:
         save(STATUS, status)
     return {'run': now, 'fetched': outcomes, 'applied': sorted(applied), 'removed': removed,
-            'refused': refused, 'reloaded': bool(need) and not status['reload'].get('pending'),
-            'message': status['message']}
+            'refused': {cid: english(why) for cid, why in refused.items()},
+            'reloaded': bool(need) and not status['reload'].get('pending'), 'message': english(status['message'])}
 
 
 def installed():
@@ -650,10 +691,10 @@ def installed():
     handler just put in place is the one Unbound's data comes from; nothing else."""
     active = load(ACTIVE, {})
     if not isinstance(active, dict) or not active.get('categories'):
-        return {'message': 'no category applied: Unbound\'s blocklist left as it is'}
+        return {'message': "no category applied: Unbound's blocklist left as it is"}
     done, error = reload_unbound()
-    return {'message': 'Unbound\'s blocklist rebuilt with %d categories' % len(active['categories']) if done
-            else error}
+    return {'message': "Unbound's blocklist rebuilt with %d categories" % len(active['categories']) if done
+            else english(error)}
 
 
 def busy():
@@ -689,8 +730,11 @@ def page(conf, entries=None, status=None):
             'id': cid, 'name': entry['name'], 'description': entry['description'], 'use': entry['use'],
             'names': names, 'counted': bool(st.get('fetched')), 'approximate': entry['approximate'] and not st.get('fetched'),
             'memory': names * per_name if isinstance(names, int) else None,
-            'refused': entry['refused'], 'chosen': cid in chosen, 'applied': cid in applied,
-            'state': (st.get('message') or 'not fetched yet') if cid in chosen and not entry['refused'] else '',
+            'refused': data_text(entry['refused']) if entry['refused'] else '',
+            'chosen': cid in chosen, 'applied': cid in applied,
+            'state': (st.get('message') or [T('not fetched yet')]) if cid in chosen and not entry['refused'] else '',
+            # name and description are msgids of categories.json where it holds the category
+            'shipped': entry['source'] == 'shipped',
         })
     held = {}
     for cid in applied:
@@ -699,10 +743,10 @@ def page(conf, entries=None, status=None):
         held[archive] = st.get('names') or 0
     return {
         'rows': rows, 'chosen': sorted(chosen), 'applied': sorted(applied),
-        'refused': status.get('refused') if isinstance(status.get('refused'), dict) else {},
+        'refused': status.get('refused') if isinstance(status.get('refused'), dict) else {},  # cid: T()
         'exceptions': (conf or {}).get('exceptions') or [],
         'names': sum(held.values()), 'memory': sum(held.values()) * per_name, 'bytes_per_name': per_name,
-        'message': str(status.get('message') or ''), 'busy': busy(),
+        'message': status.get('message') if isinstance(status.get('message'), list) else [], 'busy': busy(),
         'unbound': bool((conf or {}).get('unbound')), 'handler': os.path.isfile(HANDLER),
     }
 
@@ -726,7 +770,7 @@ def main(argv):
         with open(LOCK, 'w') as lock:
             if not take(lock, WAIT[mode]):
                 last = load(STATUS, {})
-                print(json.dumps({'message': last.get('message', 'another run is fetching'), 'busy': True}))
+                print(json.dumps({'message': english(last.get('message') or 'another run is fetching'), 'busy': True}))
                 return 0
             if mode == 'installed':
                 # for the installer's output, as fetch-frequency.php says its own

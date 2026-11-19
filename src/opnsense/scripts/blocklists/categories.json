@@ -1,5 +1,5 @@
 {
- "about": "UT1's web categories: the blacklists of Universite Toulouse 1 Capitole, under the Creative Commons licence CC BY-SA 4.0, fetched by the firewall itself; this project republishes none of them. A category's names are the DNS names of its domains file, counted on the day below; its bare IPv4 lines are left out, as DNS cannot use them. The labels and descriptions are this project's own words. Where approximate is true the count is not this project's: UT1's own page of 2026-10-08.",
+ "about": "UT1's web categories: the blacklists of Universite Toulouse 1 Capitole, under the Creative Commons licence CC BY-SA 4.0, fetched by the firewall itself; this project republishes none of them. A category's names are the DNS names of its domains file, counted on the day below; its bare IPv4 lines are left out, as DNS cannot use them. The labels and descriptions are this project's own words, each a string the page translates: a description is one short sentence, or none where it would only repeat the label. Where approximate is true the count is not this project's: UT1's own page of 2026-10-08.",
  "home": "https://dsi.ut-capitole.fr/blacklists/index_en.php",
  "download": "https://dsi.ut-capitole.fr/blacklists/download/",
  "licence": "https://creativecommons.org/licenses/by-sa/4.0/",
@@ -8,7 +8,7 @@
  "categories": {
   "adult": {
    "name": "Adult",
-   "description": "Adult sites, from erotic to pornographic.",
+   "description": "Erotic and pornographic sites.",
    "use": "block",
    "names": 4600371,
    "approximate": true,
@@ -16,31 +16,31 @@
   },
   "agressif": {
    "name": "Aggressive",
-   "description": "Sites inciting hatred or violence: racist, antisemitic and the like.",
+   "description": "Sites inciting hatred or violence.",
    "use": "block",
    "names": 266
   },
   "arjel": {
    "name": "ARJEL gambling (French)",
-   "description": "Gambling sites certified by ARJEL, a French gambling authority.",
+   "description": "Gambling sites certified by a French authority.",
    "use": "block",
    "names": 69
   },
   "associations_religieuses": {
    "name": "Religious associations",
-   "description": "Religious associations.",
+   "description": "",
    "use": "block",
    "names": 1
   },
   "astrology": {
    "name": "Astrology",
-   "description": "Astrology.",
+   "description": "",
    "use": "block",
    "names": 28
   },
   "audio-video": {
    "name": "Audio and video",
-   "description": "Audio and video sites.",
+   "description": "",
    "use": "block",
    "names": 3620
   },
@@ -52,25 +52,25 @@
   },
   "bitcoin": {
    "name": "Bitcoin mining",
-   "description": "Bitcoin mining sites.",
+   "description": "",
    "use": "block",
    "names": 1394
   },
   "blog": {
    "name": "Blogs",
-   "description": "Blogs and blog hosting.",
+   "description": "",
    "use": "block",
    "names": 1497
   },
   "celebrity": {
    "name": "Celebrities",
-   "description": "Famous people, and the magazines that write about them.",
+   "description": "Famous people and the magazines about them.",
    "use": "block",
    "names": 634
   },
   "chat": {
    "name": "Chat",
-   "description": "Chat sites.",
+   "description": "",
    "use": "block",
    "names": 195
   },
@@ -88,7 +88,7 @@
   },
   "cooking": {
    "name": "Cooking",
-   "description": "Cooking.",
+   "description": "",
    "use": "block",
    "names": 37
   },
@@ -100,13 +100,13 @@
   },
   "dangerous_material": {
    "name": "Dangerous material",
-   "description": "How to make explosives, poisons and other dangerous material.",
+   "description": "How to make explosives, poisons and the like.",
    "use": "block",
    "names": 35
   },
   "dating": {
    "name": "Dating",
-   "description": "Dating and matchmaking.",
+   "description": "",
    "use": "block",
    "names": 10564
   },
@@ -118,13 +118,13 @@
   },
   "dialer": {
    "name": "Dialers",
-   "description": "Dialer sites.",
+   "description": "",
    "use": "block",
    "names": 4
   },
   "doh": {
    "name": "DNS over HTTPS",
-   "description": "Public DNS-over-HTTPS services, which a client can use to get around this firewall's resolver.",
+   "description": "Public DNS-over-HTTPS services, which get around the firewall's resolver.",
    "use": "block",
    "names": 2995
   },
@@ -136,19 +136,19 @@
   },
   "drogue": {
    "name": "Drugs",
-   "description": "Sites about drugs.",
+   "description": "",
    "use": "block",
    "names": 447
   },
   "dynamic-dns": {
    "name": "Dynamic DNS",
-   "description": "Dynamic DNS providers.",
+   "description": "",
    "use": "block",
    "names": 2077
   },
   "educational_games": {
    "name": "Educational games",
-   "description": "Educational games.",
+   "description": "",
    "use": "allow",
    "names": 8
   },
@@ -160,7 +160,7 @@
   },
   "fakenews": {
    "name": "Fake news",
-   "description": "Fake news.",
+   "description": "",
    "use": "block",
    "names": 1118
   },
@@ -178,7 +178,7 @@
   },
   "forums": {
    "name": "Forums",
-   "description": "Forums.",
+   "description": "",
    "use": "block",
    "names": 197
   },
@@ -196,31 +196,31 @@
   },
   "hacking": {
    "name": "Hacking",
-   "description": "Hacking.",
+   "description": "",
    "use": "block",
    "names": 197
   },
   "jobsearch": {
    "name": "Job search",
-   "description": "Job search.",
+   "description": "",
    "use": "allow",
    "names": 60740
   },
   "lingerie": {
    "name": "Lingerie",
-   "description": "Lingerie.",
+   "description": "",
    "use": "block",
    "names": 193
   },
   "liste_bu": {
    "name": "French libraries",
-   "description": "French educational sites, for libraries; meant for France only.",
+   "description": "French educational sites, for libraries in France.",
    "use": "allow",
    "names": 2810
   },
   "malware": {
    "name": "Malware",
-   "description": "Sites that deliver malware. One file with Phishing at UT1: chosen together, it is fetched and held once.",
+   "description": "Sites that deliver malware, in one archive with Phishing.",
    "use": "block",
    "names": 241045,
    "archive": "phishing"
@@ -245,13 +245,13 @@
   },
   "mobile-phone": {
    "name": "Mobile phones",
-   "description": "Mobile phone content: ringtones and the like.",
+   "description": "Ringtones and other mobile phone content.",
    "use": "block",
    "names": 50
   },
   "phishing": {
    "name": "Phishing",
-   "description": "Phishing sites. One file with Malware at UT1: chosen together, it is fetched and held once.",
+   "description": "Phishing sites, in one archive with Malware.",
    "use": "block",
    "names": 241045
   },
@@ -263,13 +263,13 @@
   },
   "publicite": {
    "name": "Advertising",
-   "description": "Advertising.",
+   "description": "",
    "use": "block",
    "names": 4270
   },
   "radio": {
    "name": "Internet radio",
-   "description": "Internet radio.",
+   "description": "",
    "use": "block",
    "names": 561
   },
@@ -293,13 +293,13 @@
   },
   "residential-proxies": {
    "name": "Residential proxies",
-   "description": "Residential proxy services.",
+   "description": "",
    "use": "block",
    "names": 121
   },
   "sect": {
    "name": "Sects",
-   "description": "Sects.",
+   "description": "",
    "use": "block",
    "names": 143
   },
@@ -317,19 +317,19 @@
   },
   "shortener": {
    "name": "Link shorteners",
-   "description": "Link shortening services.",
+   "description": "",
    "use": "allow",
    "names": 4565
   },
   "social_networks": {
    "name": "Social networks",
-   "description": "Social networks.",
+   "description": "",
    "use": "block",
    "names": 715
   },
   "sports": {
    "name": "Sports",
-   "description": "Sports.",
+   "description": "",
    "use": "block",
    "names": 2362
   },
@@ -341,19 +341,19 @@
   },
   "strict_redirector": {
    "name": "Proxies, strict",
-   "description": "Proxies, with search engines' caches and image searches at UT1; for DNS the same names as Proxies.",
+   "description": "For DNS, the same names as Proxies.",
    "use": "block",
    "names": 109793
   },
   "strong_redirector": {
    "name": "Proxies, strong",
-   "description": "As Proxies, strict, with search engines blocked for some terms only at UT1; for DNS the same names as Proxies.",
+   "description": "For DNS, the same names as Proxies.",
    "use": "block",
    "names": 109793
   },
   "translation": {
    "name": "Translation",
-   "description": "Translation services.",
+   "description": "",
    "use": "allow",
    "names": 175
   },
@@ -365,7 +365,7 @@
   },
   "tricheur_pix": {
    "name": "PIX exam cheating (French)",
-   "description": "Cheating in the French PIX exam; meant for France only.",
+   "description": "Cheating in the French PIX exam, for France only.",
    "use": "block",
    "names": 55
   },
@@ -377,7 +377,7 @@
   },
   "vpn": {
    "name": "VPN",
-   "description": "VPN services.",
+   "description": "",
    "use": "block",
    "names": 6039
   },
@@ -389,13 +389,13 @@
   },
   "webhosting": {
    "name": "Web hosting",
-   "description": "Web hosting providers.",
+   "description": "",
    "use": "block",
    "names": 47
   },
   "webmail": {
    "name": "Webmail",
-   "description": "Webmail.",
+   "description": "",
    "use": "block",
    "names": 404
   }

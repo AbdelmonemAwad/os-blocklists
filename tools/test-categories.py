@@ -552,14 +552,15 @@ def run_tests(tmp):
     check(out['fetched'].get('gambling') == 'failed' and 'gambling' in active()['categories'] and len(reloads) == 2
           and open(os.path.join(state, 'gambling.domains')).read() == 'casino.example\nnew.example\n',
           'run: HTTP 500 - the last good copy kept and still applied, Unbound not rebuilt')
-    check('the last copy is kept' in status['archives']['gambling']['message'] and 'HTTP 500' in status['archives']['gambling']['message'],
-          'run: the page told the copy is kept: %r' % (status['archives']['gambling']['message'],))
+    said = categories.english(status['archives']['gambling']['message'])
+    check('the last copy is kept' in said and 'HTTP 500' in said, 'run: the page told the copy is kept: %r' % (said,))
     server.fail[categories.DOWNLOAD + 'gambling.tar.gz'] = 'down'
     server.requests.clear()
     categories.run(now=t0 + 8 * 3600 + 600)
     check(server.requests == [], 'run: a failure is not tried again before its pace (cron)')
     out = categories.run(now=t0 + 8 * 3600 + 900, apply=True)
-    check(out['fetched'].get('gambling') == 'failed' and 'not reached' in json.load(open(categories.STATUS))['archives']['gambling']['error'],
+    check(out['fetched'].get('gambling') == 'failed'
+          and 'not reached' in categories.english(json.load(open(categories.STATUS))['archives']['gambling']['error']),
           'run: Apply tries a failed one again at once')
     server.put('gambling.tar.gz', b'<!DOCTYPE html><html>Site en maintenance</html>', 'Thu, 19 Nov 2026 10:00:00 GMT')
     del server.fail[categories.DOWNLOAD + 'gambling.tar.gz']
@@ -616,7 +617,7 @@ def run_tests(tmp):
     config('gambling')
     categories.run(now=t0 + 40 * 3600, apply=True)
     status = json.load(open(categories.STATUS))
-    check('not UT1\'s catalogue' in status['catalogue'].get('error', '') and 'cat03' in categories.catalogue(),
+    check('not the catalogue of UT1' in categories.english(status['catalogue'].get('error', '')) and 'cat03' in categories.catalogue(),
           'run: global_usage answered with a maintenance page - refused, the catalogue kept: %r' % (status['catalogue'],))
 
     # --installed: a rebuild only where categories are applied
@@ -636,13 +637,57 @@ def run_tests(tmp):
           and rows['adult']['memory'] == 4600371 * 527,
           'page: adult with its reason, its size from UT1\'s page marked approximate: %r' % (rows['adult'],))
     check(rows['gambling']['chosen'] and rows['gambling']['applied'] and rows['gambling']['counted']
-          and rows['gambling']['names'] == 1 and rows['gambling']['memory'] == 527 and 'names, fetched' in rows['gambling']['state'],
+          and rows['gambling']['names'] == 1 and rows['gambling']['memory'] == 527
+          and 'names, fetched' in categories.english(rows['gambling']['state']),
           'page: gambling chosen and applied, the names of its copy, 527 bytes a name: %r' % (rows['gambling'],))
     check(rows['games']['chosen'] is False and rows['games']['counted'] is False and rows['games']['names'] > 1000,
           'page: a category not chosen - the catalogue\'s count')
     check(page['unbound'] is True and page['handler'] is True and page['exceptions'] == ['example.com']
           and page['names'] == 1 and page['bytes_per_name'] == 527, 'page: the line\'s parts: %r' % ({k: v for k, v in page.items() if k != 'rows'},))
+    texts_tests(json.load(open(categories.STATUS)), page)
     shutil.rmtree(state)
+
+
+SOURCE = os.path.join(SCRIPTS, 'i18n', 'ui', 'source.json')
+
+
+def texts(value, found):
+    """Every T() in a value, nested ones too, into found; a bare string where a text is - English the
+    page cannot translate - as itself."""
+    if isinstance(value, list):
+        for item in value:
+            texts(item, found)
+    elif isinstance(value, dict) and set(value) == {'text', 'args'}:
+        found.append(value['text'])
+        for arg in value['args']:
+            if isinstance(arg, (dict, list)):
+                texts(arg, found)
+    else:
+        found.append(('not a T()', value))
+
+
+def texts_tests(status, page):
+    catalogued = set(json.load(open(SOURCE, encoding='utf-8')))
+    found = []
+    texts(status['message'], found)
+    for archive in status['archives'].values():
+        texts(archive['message'], found)
+    for why in status['refused'].values():
+        texts(why, found)
+    texts(page['message'], found)
+    for row in page['rows']:
+        if row['state']:
+            texts(row['state'], found)
+        if row['refused']:
+            texts(row['refused'], found)
+        for key in ('name', 'description'):
+            if row[key] and row['shipped']:
+                found.append(row[key])
+    check(found and all(isinstance(t, str) for t in found),
+          'texts: every text the page is given is a T(), none a bare English sentence: %r'
+          % ([t for t in found if not isinstance(t, str)][:3],))
+    check(all(t in catalogued for t in found if isinstance(t, str)),
+          'texts: every msgid the page is given is in source.json: %r' % (sorted({t for t in found if isinstance(t, str)} - catalogued),))
 
 
 def catalogue_tests():
@@ -652,9 +697,22 @@ def catalogue_tests():
           and shipped['download'] == categories.DOWNLOAD and re.match(r'^\d{4}-\d{2}-\d{2}$', shipped['counted']),
           'categories.json: 527 bytes a name, the licence, the download folder, the day counted')
     check(len(cats) >= 60 and all(categories.ID.match(c) for c in cats), 'categories.json: %d categories, each an id' % len(cats))
-    check(all(isinstance(e.get('name'), str) and e['name'] and isinstance(e.get('description'), str) and e['description']
+    check(all(isinstance(e.get('name'), str) and e['name'] and isinstance(e.get('description'), str)
               and e.get('use') in ('block', 'allow') and isinstance(e.get('names'), int) for e in cats.values()),
-          'categories.json: each a name, a description, its use and a count')
+          'categories.json: each a name, a description (or none), its use and a count')
+    check(all(len(e['description']) <= 80 and (not e['description'] or e['description'].endswith('.'))
+              and '. ' not in e['description'] and e['description'].rstrip('.') != e['name'] for e in cats.values()),
+          'categories.json: each description one short sentence, none that only repeats its label: %r'
+          % ([c for c, e in cats.items() if len(e['description']) > 80 or '. ' in e['description']],))
+    catalogued = set(json.load(open(SOURCE, encoding='utf-8')))
+    texts_of = {t for e in cats.values() for t in (e['name'], e['description'], e.get('refused')) if t}
+    check(texts_of <= catalogued, 'categories.json: every name, description and reason catalogued: %r'
+          % (sorted(texts_of - catalogued)[:5],))
+    literal = re.compile(r"""\bT\(\s*('(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*")""")
+    import ast
+    for script in ('categories.py', 'lookup.py'):
+        found = {ast.literal_eval(m) for m in literal.findall(open(os.path.join(SCRIPTS, script), encoding='utf-8').read())}
+        check(found and found <= catalogued, '%s: every T() msgid (%d) catalogued: %r' % (script, len(found), sorted(found - catalogued)))
     check([c for c, e in cats.items() if e.get('refused')] == ['adult'] and cats['adult'].get('approximate') is True
           and cats['adult']['names'] == 4600371 and [c for c, e in cats.items() if e.get('approximate')] == ['adult'],
           'categories.json: adult alone refused, its count the one not counted here (approximate)')

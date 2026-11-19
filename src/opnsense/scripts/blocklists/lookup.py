@@ -18,6 +18,8 @@ owner's in Unbound DNS: Blocklists, only that it holds the name, and its descrip
 networks, lists or allowlist, which whoever may see Block Lists need not be allowed to see. The file may hold millions of names; it is searched where it lies
 (mmap), never loaded whole. pf's tables hold addresses: a name is not resolved, and not looked up there.
 
+Its texts for the page are categories.T(): the page's controller translates them.
+
 Read only: nothing is changed, written or fetched. The argument is checked before anything is run - a
 host name, or an IPv4 or IPv6 address, and nothing else - and no shell is used. Never fails its caller.
 """
@@ -32,6 +34,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import categories                                                        # noqa: E402
 import cut                                                               # noqa: E402
+from categories import T                                                 # noqa: E402
 
 PFCTL = '/sbin/pfctl'
 DNSBL = '/var/unbound/data/dnsbl.json'
@@ -78,7 +81,7 @@ def tables(address):
     out = {'checked': 0, 'held': [], 'errors': []}
     shown = pfctl(['-s', 'Tables'])
     if shown is None or shown.returncode != 0:
-        out['errors'].append("pf's tables could not be read")
+        out['errors'].append(T('the pf tables could not be read'))
         return out
     present = {line.strip() for line in shown.stdout.splitlines() if line.strip()}
     feeds = categories.load(FEEDS, {})
@@ -87,7 +90,7 @@ def tables(address):
         out['checked'] += 1
         r = pfctl(['-t', table, '-T', 'test', address])
         if r is None:
-            out['errors'].append('%s: pfctl could not be run' % table)
+            out['errors'].append(T('%s: pfctl could not be run', table))
             continue
         found = MATCH.match((r.stdout or '') + (r.stderr or ''))
         held = r.returncode == 0 if not found else int(found.group(1)) > 0
@@ -96,7 +99,8 @@ def tables(address):
             continue
         if held:
             feed = feeds.get(table[len(cut.PREFIX):]) if isinstance(feeds.get(table[len(cut.PREFIX):]), dict) else {}
-            out['held'].append({'alias': table, 'list': str(feed.get('name') or ('countries' if table == cut.PREFIX + 'countries' else ''))})
+            out['held'].append({'alias': table, 'list': str(feed.get('name') or '') or (
+                T('countries') if table == cut.PREFIX + 'countries' else '')})
     return out
 
 
@@ -142,7 +146,7 @@ def unbound(name, path=None):
     try:
         size = os.path.getsize(path)
     except OSError:
-        out['errors'].append('no blocklist data: %s is not there' % path)
+        out['errors'].append(T('no blocklist data: %s is not there', path))
         return out
     out['read'] = True
     if size == 0:
@@ -170,7 +174,7 @@ def unbound(name, path=None):
                 found.append((match.group(1).decode(), items if isinstance(items, list) else []))
     except (OSError, ValueError) as e:
         out['read'] = False
-        out['errors'].append('%s could not be read: %s' % (path, e))
+        out['errors'].append(T('%s could not be read: %s', path, str(e)))
         return out
     config = config if isinstance(config, dict) else {}
     owners = set()
@@ -206,7 +210,7 @@ def unbound(name, path=None):
 def lookup(text):
     kind, query = parse(text)
     if kind is None:
-        return {'error': 'not a name or an address'}
+        return {'error': T('not a name or an address')}
     out = {'query': query, 'kind': kind}
     if kind == 'address':
         out['tables'] = tables(query)
@@ -222,7 +226,7 @@ def main(argv):
     try:
         result = lookup(argv[0] if len(argv) == 1 else None)
     except Exception as e:      # never fail the caller: the page
-        result = {'error': 'stopped: %s' % e}
+        result = {'error': T('stopped: %s', str(e))}
     print(json.dumps(result, sort_keys=True))
     return 0
 
