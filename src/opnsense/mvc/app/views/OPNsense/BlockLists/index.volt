@@ -598,12 +598,12 @@
             <thead>
                 <tr>
                     <th data-column-id="address" data-formatter="address" data-type="string" data-identifier="true" data-width="14em">{{ lang._('Address') }}</th>
-                    <th data-column-id="at" data-type="string" data-width="11em">{{ lang._('First dropped') }}</th>
-                    <th data-column-id="last" data-type="string" data-width="11em">{{ lang._('Last dropped') }}</th>
-                    <th data-column-id="until" data-type="string" data-width="11em">{{ lang._('Held until') }}</th>
-                    <th data-column-id="count" data-type="numeric" data-width="6em">{{ lang._('Drops') }}</th>
+                    <th data-column-id="at" data-type="string" data-width="13em">{{ lang._('First dropped') }}</th>
+                    <th data-column-id="last" data-type="string" data-width="13em">{{ lang._('Last dropped') }}</th>
+                    <th data-column-id="until" data-type="string" data-width="13em">{{ lang._('Held until') }}</th>
+                    <th data-column-id="count" data-type="numeric" data-width="9em">{{ lang._('Drops') }}</th>
                     <th data-column-id="msg" data-formatter="signature" data-type="string">{{ lang._('Signature') }}</th>
-                    <th data-column-id="commands" data-formatter="remove" data-sortable="false" data-width="5em"></th>
+                    <th data-column-id="take_out" data-formatter="remove" data-sortable="false" data-width="5em"></th>
                 </tr>
             </thead>
             <tbody></tbody>
