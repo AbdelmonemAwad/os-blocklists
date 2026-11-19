@@ -162,36 +162,61 @@ Block lists in one place: addresses, DNS names, UT1's web categories, countries 
   seen, to find the one to list (those in the log's last 64 MB, since 2026-10-29);
 - **what the IPS drops, blocked and cut for a while** (since 2026-11-19, not yet on a firewall: [What is
   tested](#what-is-tested)) - with "Block what the IPS drops" on (Settings; off by default), the source of
-  each alert the Intrusion Detection logs as blocked - its IPS policy dropped what that address sent - goes
-  into a list of the plugin's own, **IPS drops** (`blocklists_ids`), for "Keep an address" minutes after
-  its last such drop (60 by default, 5 to 10080), and leaves after. It is blocked by the plugin's rules
-  like the other lists, in the Direction the page says, and its open connections are cut by `cut.py` -
-  at once, run for the addresses just entered, and so on the coprocessor too where os-xgs-npu's Cut in
-  hardware is on (os-xgs-npu's "Cut what the IPS drops" cuts the dropped connection itself; this keeps its
-  source out for a while). `ids_list.py` reads the Intrusion Detection's `eve.json` every three seconds
-  through each minute, from where it stopped (from its start after a rotation; a line not yet ended waits
-  for its end), with the reader of `ja4_cut.py`:
+  each alert the Intrusion Detection logs as blocked on a connection it saw established - its IPS policy
+  dropped what that address sent - goes into a list of the plugin's own, **IPS drops** (`blocklists_ids`),
+  for "Keep an address" minutes after its last such drop (60 by default, 5 to 10080; a change applies to
+  the addresses already held too), and leaves after. It is blocked by the plugin's rules like the other
+  lists, in the Direction the page says. Where "Cut open connections" is on, the open connections of the
+  addresses a reading has just entered are cut at once - their pf states, one by one - and on the
+  coprocessor too where os-xgs-npu's Cut in hardware is on and Direction is Both ways (os-xgs-npu's "Cut
+  what the IPS drops" cuts the dropped connection itself; this keeps its source out for a while);
+  `cut.py`, every minute, hands an address back from hardware when it leaves. `ids_list.py` reads the
+  Intrusion Detection's `eve.json` every three seconds through each minute, from where it stopped - after
+  a rotation the old log's rest (`eve.json.0`) first, then the new one from its start; a log emptied in
+  place, even grown again past where it stopped, from its start; a line not yet ended waits for its end -
+  with the reader of `ja4_cut.py`, and writes one line in the system log a reading, however many entered:
   - *What enters*: only an alert logged as **blocked** - the IPS mode, Netmap or Divert; IDS mode logs
-    none, and the tab says so - over **TCP** - a UDP or ICMP packet is easily forged with another's
-    address, to have it blocked - and not by one of Suricata's own decoder, stream and application-layer
-    event rules (signature ids 2200000-2299999), which drop one packet, not a connection: os-xgs-npu's
-    reasons. The address entered is the alert's source.
+    none, and the tab says so - over **TCP**, on a connection Suricata saw **established**: its
+    application protocol recognised (the alert's `app_proto`, which Suricata sets only once the stream is
+    established, the handshake completed with the real address - a forged one never sees the answer;
+    `stream.midstream` off, Suricata's default) and, where the alert carries its flow's counts, packets
+    both ways past the handshake (2 to the server and 1 back at least). An alert's source can be forged,
+    so a lone SYN - a scan's, or one sent with another's address - never enters, nor a blind ACK, nor a
+    UDP or ICMP packet, nor one of Suricata's own decoder, stream and application-layer event rules
+    (signature ids 2200000-2299999), which drop one packet, not a connection: os-xgs-npu's reasons. The
+    address entered is the alert's source. At most 200 enter at a reading, the rest at the next.
   - *What never enters*: an address of the firewall's own - every interface's, IPv4 and IPv6, read from
-    `ifconfig` as it runs; none at all where they cannot be read - and loopback, multicast, unspecified,
-    link-local, this network, reserved; and, with "Outside addresses only" on (the default), a private one
-    - 10/8, 172.16/12, 192.168/16, the shared 100.64/10, where VPN overlays live too, IPv6's unique local
-    fc00::/7 - so a false alarm never cuts a device of the owner's own networks off for an hour.
-  - *Its table*: an external alias, as ThreatFox's, made by Apply while the setting is on and removed
-    when it is off; the script puts the list into it (`pfctl -T replace -f -`) when it changes, and looks
-    once a minute to put back what it lost. At most 10,000 addresses: past them, those dropped longest ago
+    `ifconfig` (again before anything enters where the last reading is more than three seconds old, so an
+    address PPPoE or DHCP has just given it is known; nothing enters where they cannot be read), its
+    virtual IPs (a Proxy ARP one's whole network) and the external addresses of its 1:1 and outbound NAT -
+    and loopback, multicast, unspecified, link-local, this network, reserved; what it depends on: its
+    gateways and their monitor addresses (config.xml's, and a dynamic gateway's from `/tmp`), its DNS
+    servers (config.xml's, `/etc/resolv.conf`'s, Unbound's forwarding and DNS over TLS servers) and its
+    VPN peers (IPsec remote gateways, WireGuard endpoints, OpenVPN remotes; one named by its host name
+    resolved every ten minutes); who manages it: an address with a connection open to its web GUI or SSH
+    port, from pf's states read before anything enters; and what "Never block" holds, the owner's own
+    addresses and networks.
+  - *Outside addresses only* (on by default): nothing inside the firewall's own networks enters either -
+    every network connected to it (each interface's address and prefix, IPv4 and IPv6: a LAN's /64, a
+    public DMZ, WAN's own; a tunnel's far end), its delegated IPv6 prefixes, its VPN tunnel and remote
+    networks, its static routes' networks, and the private ones - 10/8, 172.16/12, 192.168/16, the shared
+    100.64/10, where VPN overlays live too, IPv6's unique local fc00::/7 - so a false alarm never cuts a
+    device of the owner's off for the time set. Off, a device inside is blocked as well when the IPS drops
+    what it sends. Every address held is checked again at a change of these settings and every third
+    reading (what the firewall holds is read again once a minute, and before anything enters): one now
+    among them leaves.
+  - *Its table*: an external alias, as ThreatFox's, made by Apply while the setting is on and removed when
+    it is off; the script puts the list into it (`pfctl -T replace -f -`) when it changes, and looks once
+    a minute to put back what it lost. At most 10,000 addresses: past them, those dropped longest ago
     leave first. Turned on, nothing logged before is taken; turned off, or Block Lists off, every address
     leaves at the next run and the table is emptied. Its state - each address, when it was first and last
     dropped, until when it is held, the signature that dropped it last - is in
     `/var/db/os-blocklists/ids`: where `/var` is kept in memory, a reboot starts the list empty.
-  - *The page*: the three settings in Settings; an **IPS drops** tab with how many are held, why nothing
-    is entered where something keeps it, and a grid of the addresses - first and last drop, until when,
-    the signature - each with a button to take it out now. The Lookup tab names the list (IPS drops) for
-    an address it holds, and the Lists tab shows it beside the others;
+  - *The page*: the four settings in Settings; an **IPS drops** tab with how many are held, why nothing is
+    entered where something keeps it, and a grid of the addresses - first and last drop, until when, the
+    signature - each with a button to take it out now (where the minute's run is reading, it takes the
+    request within seconds). The Lookup tab names the list (IPS drops) for an address it holds, and the
+    Lists tab shows it beside the others;
 - **DNS lists** - OPNsense keeps them itself, in Unbound DNS: Blocklists; the page shows them beside
   the others and links there;
 - **web categories** (since 2026-11-19, not yet on a firewall: [What is tested](#what-is-tested)) - the
@@ -329,10 +354,13 @@ hardware`). Without os-xgs-npu nothing changes.
 ## Not yet, and why
 
 - **what the IPS drops is entered by the alert, not by the connection** - an address enters for any TCP
-  alert logged as blocked, whatever the rule; a rule of the owner's that drops too eagerly blocks its
-  sources too, for the time set. Suricata's own event rules and UDP and ICMP are left out, and the owner's
-  own networks by default; the rest is the rules' to decide. The list is not kept across a reboot where
-  `/var` is in memory.
+  alert logged as blocked on a connection Suricata saw established, whatever the rule; a rule of the
+  owner's that drops too eagerly blocks its sources too, for the time set ("Never block" keeps an address
+  or a network out). A drop on a connection whose application protocol Suricata does not recognise
+  (`app_proto` absent or `failed`), or before the connection is established - a scan's SYN - never enters:
+  the price of keeping a forged source out. Suricata's own event rules and UDP and ICMP are left out, and
+  the owner's own networks by default; the rest is the rules' to decide. The list is not kept across a
+  reboot where `/var` is in memory.
 
 - **a QUIC or DTLS client's JA4** - only a TLS client over TCP (`t...`) is cut: `ja4_cut.py` reads
   the Intrusion Detection's `tls` lines, and a QUIC (`q...`) or DTLS (`d...`) client's fingerprint
@@ -567,17 +595,29 @@ In English: [Web categories](docs/images/categories/categories-en.png),
 
 What the IPS drops (2026-11-19) is tested by the checks only - not on a firewall, and not with Suricata.
 `tools/test-ids.py` runs `ids_list.py` against an `eve.json` written as Suricata writes its alerts, with
-pf's table, `ifconfig`, the cut and the system log stood in for: a TCP drop's source in, IPv4, IPv6 and
-IPv4-mapped; UDP, ICMP, Suricata's event rules, IDS mode's alerts (not blocked), the firewall's own
-addresses and the private, link-local, multicast, loopback and unspecified ones out; a drop again
-starting the time again, its end, the cap; the log read from where it stopped, from its start after a
-rotation, a line cut in half; off, every address out and the table emptied; on, nothing from before;
-taking one out at once and through the minute's run; the table put back after it lost its addresses;
-the minute's run taking a drop logged while it runs. `tools/test-ids.php` runs apply.php's alias for it
-and each remover's own step taking it out. To be done on a firewall before this is merged: Suricata in
-IPS mode with a local rule that drops - its source in the table within seconds, its other connections
-cut (on the coprocessor where os-xgs-npu is installed), and out again after the time set; IDS mode said
-on the tab; a private source left out; the grid's button; and a removal leaving no alias, table or state.
+pf (its table and states), `ifconfig`, `/tmp`'s gateway and prefix files, `resolv.conf`, name resolution
+and the system log stood in for: a TCP drop's source on an established connection in, IPv4, IPv6 and
+IPv4-mapped; a lone SYN, a blind ACK, a connection whose protocol was not recognised or with packets one
+way only, UDP, ICMP, Suricata's event rules and IDS mode's alerts out; the firewall's own addresses
+(interfaces, a CARP address, a virtual IP, a Proxy ARP network, 1:1 and outbound NAT, loopback's), an
+address given to it seconds before, its gateways and monitors, its DNS servers, its VPN peers (one by host
+name), an address managing it through its web GUI, Never block and the special ranges out; with Outside
+addresses only, a LAN's IPv6 /64, a public DMZ, a delegated prefix, a static route's network, a tunnel's
+and the private ones out, and in with it off; held addresses taken out when the settings or the firewall
+change; the time kept from the last drop with the minutes set now, its end, the budget of a reading and
+the cap; only the new addresses' states cut, nothing with Cut open connections off; one log line a
+reading; the log read from where it stopped, a rotation's rest in `eve.json.0` first, a log emptied in
+place and grown again from its start, a line cut in half; off, every address out and the table emptied;
+on, nothing from before; taking one out at once, after the reading that saw it dropped again, and while
+the minute's run holds the lock; the table put back after it lost its addresses; the minute's run taking a
+drop logged while it runs, and waiting for the last one to end. `tools/test-ids.php` runs apply.php's
+alias for it and each remover's own step taking it out - and switching it off where a rule names it - and
+the test runs each remover's line emptying its table. To be done on a firewall before this is merged:
+Suricata in IPS mode with a local rule that drops on an established connection - the alert's `app_proto`
+and `flow` counts as expected, its source in the table within seconds, its other connections cut (on the
+coprocessor where os-xgs-npu is installed), and out again after the time set; a scan's SYN dropped and not
+entered; IDS mode said on the tab; a private source and the GUI's own manager left out; the grid's button;
+and a removal leaving no alias, table or state.
 
 ## Installation
 
@@ -614,7 +654,8 @@ plugin's stays in Unbound. An install or an update rebuilds it only where catego
 `dnsbl.json` was not written by the handler just installed (its stamp holds the handler's source); where
 a run of the script is going on, or the rebuild is not done, it is owed to the next run, within five
 minutes. And it takes the IPS drops' alias, `blocklists_ids`, out of config.xml (switched off instead
-where a rule of the owner's names it), through OPNsense's own alias model, before its filter reload, so
+where a rule of the owner's names it), through OPNsense's own alias model, before its filter reload, and
+empties its table after it whatever names the alias - its addresses are the plugin's, held for a while - so
 no alias, rule, table or state of it stays.
 
 **From a release's package.** A release carries `os-blocklists-<version>.pkg` and `SHA256SUMS`,
