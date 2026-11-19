@@ -91,6 +91,29 @@
                 <Mask>/^[\s,]*(t[0-9a-z]{2}[di][0-9]{4}[0-9A-Za-z]{2}_[0-9a-f]{12}_[0-9a-f]{12}([\s,]+t[0-9a-z]{2}[di][0-9]{4}[0-9A-Za-z]{2}_[0-9a-f]{12}_[0-9a-f]{12})*)?[\s,]*$/</Mask>
                 <ValidationMessage>Each fingerprint looks like t13d1516h2_8daaf6152771_02713d6af862, separated by commas.</ValidationMessage>
             </ja4>
+            <!--
+                UT1's web categories chosen (2026-11-19), applied through OPNsense's own Unbound blocklist by
+                scripts/blocklists/categories.py and the handler scripts/unbound/blocklists/blocklists_ut1.py.
+                CategoryField offers the categories of scripts/blocklists/categories.json and those UT1's own
+                catalogue adds where categories.py fetched it - never adult (decision d2). categories.py
+                reads this by element name, and refuses adult and any name no catalogue has, whatever is
+                written here. Empty by default: nothing to migrate.
+            -->
+            <categories type="OPNsense\BlockLists\FieldTypes\CategoryField">
+                <Multiple>Y</Multiple>
+                <Required>N</Required>
+            </categories>
+            <!--
+                Names the web categories let through, each with every subdomain: the handler writes
+                (.*\.)?name$ for each into its policy's passlist. That policy's only, as OPNsense's own
+                allowlists apply to their own policy only.
+            -->
+            <exceptions type="CSVListField">
+                <Required>N</Required>
+                <Mask>/\A(?=.{1,253}\z)(?:[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?\.)+[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?\z/</Mask>
+                <MaskPerItem>Y</MaskPerItem>
+                <ValidationMessage>An exception is a name such as example.com: letters, digits, hyphens and dots.</ValidationMessage>
+            </exceptions>
         </general>
     </items>
 </model>

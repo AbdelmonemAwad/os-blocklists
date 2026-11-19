@@ -3,7 +3,8 @@
  # Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
  #
  # Firewall: Block Lists (XGS: Block Lists when os-xgs-npu is installed) - the address lists, the
- # countries, the DNS lists and the JA4 fingerprints in one place, with what each blocked and cut.
+ # countries, the DNS lists, UT1's web categories and the JA4 fingerprints in one place, with what each
+ # blocked and cut, and a lookup of where a name or an address is held.
  #}
 
 <style>
@@ -26,7 +27,7 @@
        the difference; wide screens never need to scroll it sideways. */
     @media (min-width: 768px) {
         #grid-lists .tabulator-tableholder, #grid-dns .tabulator-tableholder,
-        #grid-seen .tabulator-tableholder { overflow-x: hidden; }
+        #grid-seen .tabulator-tableholder, #grid-categories .tabulator-tableholder { overflow-x: hidden; }
     }
 </style>
 
@@ -70,6 +71,17 @@
             return n === null || n === undefined || n === '' ? '-' : Number(n).toLocaleString();
         }
 
+        /* bytes as the Web categories tab says them: MiB, or GiB from one GiB */
+        function size(bytes) {
+            if (bytes === null || bytes === undefined || bytes === '') {
+                return '-';
+            }
+            if (bytes >= 1073741824) {
+                return (bytes / 1073741824).toFixed(1) + ' GiB';
+            }
+            return bytes < 1048576 ? '< 1 MiB' : Math.round(bytes / 1048576).toLocaleString() + ' MiB';
+        }
+
         /* The abuse.ch Auth-Key's field (ThreatFox): the page is never given the key - OPNsense's
            write-only field answers it empty - so the field says whether one is saved, and Remove the
            key is there only where one is. */
@@ -80,8 +92,8 @@
         }
 
         /*
-         * Four cards: the address lists (the countries are one of them, an alias like the others),
-         * what their rules blocked, the DNS lists and the JA4 fingerprints.
+         * Five cards: the address lists (the countries are one of them, an alias like the others),
+         * what their rules blocked, the DNS lists, the web categories and the JA4 fingerprints.
          */
         function draw(data) {
             const $cards = $('#bl-cards').empty();
@@ -103,6 +115,14 @@
             const dnsOn = data.dns.lists.filter(function (l) { return l.enabled; }).length;
             $cards.append(card(dnsOn && data.dns.enabled ? 'ok' : '', 'fa-filter', "{{ lang._('DNS lists') }}",
                 String(dnsOn), data.dns.enabled ? "{{ lang._('in Unbound DNS') }}" : "{{ lang._('Unbound DNS is off') }}"));
+            /* UT1's web categories: those applied to Unbound, of those chosen */
+            const web = data.categories || {};
+            const webChosen = (web.chosen || []).length;
+            const webApplied = (web.applied || []).length;
+            $cards.append(card(!webChosen ? '' : (!data.enabled || !web.unbound || webApplied < webChosen ? 'warn' : 'ok'),
+                'fa-globe', "{{ lang._('Web categories') }}", String(webApplied),
+                !webChosen ? "{{ lang._('none chosen') }}" : (!data.enabled ? "{{ lang._('Block Lists is off') }}" :
+                    (!web.unbound ? "{{ lang._('Unbound DNS is off') }}" : count(web.names) + ' ' + "{{ lang._('names in Unbound DNS') }}"))));
             const ja4 = data.ja4.listed.length;
             $cards.append(card(ja4 && data.ja4.problem ? 'warn' : (ja4 ? 'ok' : ''), 'fa-hand-paper-o',
                 "{{ lang._('JA4') }}", String(ja4), ja4 && data.ja4.problem ? data.ja4.problem :
@@ -128,6 +148,13 @@
             $('#bl-ja4-problem').text(plain(data.ja4.problem || '')).toggle(!!data.ja4.problem);
             $('#bl-ja4-listed').text(plain(data.ja4.listed.length ? data.ja4.listed.join(', ') : '-'));
             $('#bl-ja4-last').text(plain(data.ja4.last && data.ja4.last.last ? data.ja4.last.last.message || '-' : '-'));
+
+            /* the Web categories tab: Unbound in use or not, the last run's line, what is applied */
+            $('#bl-cat-unbound').toggle(!web.unbound);
+            $('#bl-cat-line').text(plain((web.busy ? "{{ lang._('being fetched now') }}" + ' · ' : '') +
+                (web.error || web.message || "{{ lang._('not run yet') }}")));
+            $('#bl-cat-total').text(plain(webApplied ? count(web.names) + ' ' + "{{ lang._('names at the most') }}" + ', ' +
+                size(web.memory) + ' ' + "{{ lang._('in Unbound, an estimate') }}" : '-'));
         }
 
         function refresh() {
@@ -155,6 +182,41 @@
                     },
                     number: function (column, row) {
                         return count(row[column.id]);
+                    }
+                }
+            }
+        });
+
+        /* UT1's categories, every one offered: what it is, its size, its state; adult greyed with its reason */
+        $('#grid-categories').UIBootgrid({
+            search: '/api/blocklists/service/search_categories',
+            options: {
+                selection: false,
+                formatters: {
+                    category: function (column, row) {
+                        const mark = row.refused ? '<i class="fa fa-fw fa-ban"></i> ' :
+                            (row.chosen ? '<i class="fa fa-fw fa-check-square-o"></i> ' : '<i class="fa fa-fw fa-square-o"></i> ');
+                        return '<span class="' + (row.refused ? 'text-muted' : '') + '">' + mark + '<b>' + row.name +
+                            '</b> <code>' + row.id + '</code></span>' +
+                            (row.description ? '<div class="text-muted small">' + row.description + '</div>' : '');
+                    },
+                    use: function (column, row) {
+                        return row.use === 'allow' ? "{{ lang._('allow list') }}" : "{{ lang._('block list') }}";
+                    },
+                    names: function (column, row) {
+                        return row.names === null ? '-' : (row.counted ? '' : '~ ') + count(row.names);
+                    },
+                    memory: function (column, row) {
+                        return row.memory === null ? '-' : '~ ' + size(row.memory);
+                    },
+                    state: function (column, row) {
+                        if (row.refused) {
+                            return '<span class="text-muted">' + "{{ lang._('cannot be chosen') }}" + ': ' + row.refused + '</span>';
+                        }
+                        if (!row.chosen) {
+                            return '<span class="text-muted">' + "{{ lang._('not chosen') }}" + '</span>';
+                        }
+                        return (row.applied ? "{{ lang._('applied') }}" : "{{ lang._('not applied') }}") + (row.state ? ': ' + row.state : '');
                     }
                 }
             }
@@ -215,12 +277,14 @@
                 $('#grid-lists').bootgrid('reload');
             } else if (tab === '#dns') {
                 $('#grid-dns').bootgrid('reload');
+            } else if (tab === '#categories') {
+                $('#grid-categories').bootgrid('reload');
             } else if (tab === '#ja4' && seen_open) {
                 $('#grid-seen').bootgrid('reload');
             }
         });
 
-        mapDataToFormUI({'frm_general': '/api/blocklists/settings/get'}).done(function () {
+        mapDataToFormUI({'frm_general': '/api/blocklists/settings/get', 'frm_categories': '/api/blocklists/settings/get'}).done(function () {
             $('.selectpicker').selectpicker('refresh');
         });
 
@@ -259,7 +323,91 @@
             }, false, done);
         });
 
-        cards_wait('#bl-cards', ["{{ lang._('Lists') }}", "{{ lang._('Blocked') }}", "{{ lang._('DNS lists') }}", "{{ lang._('JA4') }}"]);
+        /* The Web categories tab's Apply: its own form saved, then the page's whole Apply, which fetches
+           and applies the categories in the background (categories.py --apply) */
+        $('#applyCategoriesAct').click(function () {
+            const $button = $(this).prop('disabled', true);
+            const $progress = $('#frm_categories_progress').addClass('fa fa-spinner fa-pulse');
+            const done = function () {
+                $progress.removeClass('fa fa-spinner fa-pulse');
+                $button.prop('disabled', false);
+            };
+            saveFormToEndpoint('/api/blocklists/settings/set', 'frm_categories', function () {
+                ajaxCall('/api/blocklists/service/apply', {}, function (data) {
+                    done();
+                    const ok = data && data.status === 'ok';
+                    $('#bl-cat-result').attr('class', ok ? 'text-muted' : 'alert alert-danger').text(plain(ok ?
+                        "{{ lang._('Saved. The web categories are fetched and applied to Unbound DNS in the background; Unbound reads them within a minute.') }}" :
+                        (data && data.errors ? data.errors.join(' · ') : "{{ lang._('The settings could not be applied.') }}"))).show();
+                    const again = function () {
+                        refresh();
+                        $('#grid-categories').bootgrid('reload');
+                    };
+                    again();
+                    setTimeout(again, 15000);
+                    setTimeout(again, 60000);
+                });
+            }, false, done);
+        });
+
+        /* The Lookup tab: a name or an address, and every place of the block lists that holds it */
+        function lookup_show(data) {
+            const $out = $('#bl-lookup-result').empty();
+            if (!data || data.error) {
+                $out.append($('<div class="alert alert-warning" role="alert"/>').text(plain(data && data.error ? data.error :
+                    "{{ lang._('No answer could be read.') }}")));
+                return;
+            }
+            const $list = $('<ul/>');
+            const errors = [];
+            if (data.kind === 'address') {
+                $.each(data.tables.held || [], function (i, t) {
+                    $list.append($('<li/>').text(plain("{{ lang._('pf table') }}" + ' ' + t.alias + (t.list ? ' (' + t.list + ')' : ''))));
+                });
+                errors.push.apply(errors, data.tables.errors || []);
+            } else {
+                $.each(data.categories.held || [], function (i, c) {
+                    $list.append($('<li/>').text(plain("{{ lang._('Web category') }}" + ' ' + c.name + ' (' + c.id + ')' +
+                        (c.entry !== data.query ? ', ' + "{{ lang._('as a name under') }}" + ' ' + c.entry : '') +
+                        (c.exception ? ' - ' + "{{ lang._('let through by the exception') }}" + ' ' + c.exception : ''))));
+                });
+                $.each(data.unbound.held || [], function (i, u) {
+                    $list.append($('<li/>').text(plain("{{ lang._('Unbound DNS blocklist') }}" + ': ' +
+                        (u.mine ? "{{ lang._('the policy of the web categories') }}" : "{{ lang._('a policy of Unbound DNS: Blocklists') }}") +
+                        (u.description ? ' "' + u.description + '"' : '') +
+                        (u.entry !== data.query ? ', ' + "{{ lang._('as a name under') }}" + ' ' + u.entry : '') +
+                        (u.source_nets && u.source_nets.length ? ', ' + "{{ lang._('for clients in') }}" + ' ' + u.source_nets.join(' ') : '') +
+                        (u.passes ? ' - ' + "{{ lang._('its allowlist lets it through') }}" : ''))));
+                });
+                errors.push.apply(errors, (data.categories.errors || []).concat(data.unbound.errors || []));
+            }
+            $out.append($('<div/>').append($('<b dir="ltr"/>').text(plain(data.query))).append(document.createTextNode(': ' +
+                plain(data.found ? "{{ lang._('held in these places') }}" : "{{ lang._('held nowhere in these block lists') }}"))));
+            if (data.found) {
+                $out.append($list);
+            }
+            $out.append($('<div class="text-muted"/>').text(plain(data.kind === 'address' ?
+                "{{ lang._('An address is looked up in the pf tables of the lists of this page. The web categories and Unbound DNS hold names.') }}" :
+                "{{ lang._('A name is looked up in the web categories applied and in the blocklist data of Unbound DNS, with the names above it. The pf tables hold addresses: a name is not looked up there, and not resolved.') }}")));
+            $.each(errors, function (i, e) {
+                $out.append($('<div class="text-warning"/>').text(plain(e)));
+            });
+        }
+
+        $('#bl-lookup-form').on('submit', function (e) {
+            e.preventDefault();
+            const query = String($('#bl-lookup-query').val() || '').trim();
+            if (query === '') {
+                return;
+            }
+            const $button = $('#lookupAct').prop('disabled', true);
+            ajaxCall('/api/blocklists/service/lookup', {'query': query}, function (data) {
+                $button.prop('disabled', false);
+                lookup_show(data);
+            });
+        });
+
+        cards_wait('#bl-cards', ["{{ lang._('Lists') }}", "{{ lang._('Blocked') }}", "{{ lang._('DNS lists') }}", "{{ lang._('Web categories') }}", "{{ lang._('JA4') }}"]);
         refresh();
         keep_tab();
     });
@@ -274,7 +422,9 @@
 <ul class="nav nav-tabs" data-tabs="tabs" id="maintabs">
     <li class="active"><a data-toggle="tab" href="#lists">{{ lang._('Lists') }}</a></li>
     <li><a data-toggle="tab" href="#dns">{{ lang._('DNS') }}</a></li>
+    <li><a data-toggle="tab" href="#categories">{{ lang._('Web categories') }}</a></li>
     <li><a data-toggle="tab" href="#ja4">{{ lang._('JA4') }}</a></li>
+    <li><a data-toggle="tab" href="#lookup">{{ lang._('Lookup') }}</a></li>
     <li><a data-toggle="tab" href="#settings">{{ lang._('Settings') }}</a></li>
 </ul>
 
@@ -328,6 +478,41 @@
         </div>
         <div style="padding: 0 15px 15px;"><a href="/ui/unbound/dnsbl/index">{{ lang._('Open Unbound DNS: Blocklists') }}</a></div>
     </div>
+    <div id="categories" class="tab-pane">
+        <div id="bl-cat-unbound" class="alert alert-warning" role="alert" style="display: none; margin: 15px 15px 0;">
+            {{ lang._('Unbound DNS is off: the web categories have no effect until it is the resolver the clients use.') }}
+        </div>
+        <div class="text-muted" style="padding: 10px 15px 0;">
+            {{ lang._('Web categories block names by DNS, through the Unbound blocklist of OPNsense itself, in a policy of their own for every client, beside the policies of Unbound DNS: Blocklists, which are left as they are. The categories are those of UT1, Universite Toulouse 1 Capitole, under the licence CC BY-SA 4.0; the firewall fetches them itself.') }}
+            <a href="https://dsi.ut-capitole.fr/blacklists/index_en.php" target="_blank" rel="noopener noreferrer">UT1</a>
+            &middot; <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>
+        </div>
+        {{ partial("layout_partials/base_form", ['fields': categoriesForm, 'id': 'frm_categories', 'apply_btn_id': 'applyCategoriesAct']) }}
+        <div style="padding: 0 15px 10px;"><div id="bl-cat-result" style="display: none;"></div></div>
+        <div style="padding: 0 15px 5px;">
+            {{ lang._('Last run') }}: <span id="bl-cat-line">-</span>
+        </div>
+        <div style="padding: 0 15px 10px;">
+            {{ lang._('Applied') }}: <span id="bl-cat-total">-</span>
+        </div>
+        <table id="grid-categories" class="table table-condensed table-hover table-striped table-responsive">
+            <thead>
+                <tr>
+                    <th data-column-id="id" data-type="string" data-identifier="true" data-visible="false">{{ lang._('ID') }}</th>
+                    <th data-column-id="name" data-formatter="category" data-type="string">{{ lang._('Category') }}</th>
+                    <th data-column-id="use" data-formatter="use" data-type="string" data-width="8em">{{ lang._('Made as') }}</th>
+                    <th data-column-id="names" data-formatter="names" data-type="numeric" data-width="9em">{{ lang._('Names') }}</th>
+                    <th data-column-id="memory" data-formatter="memory" data-type="numeric" data-width="9em">{{ lang._('Memory') }}</th>
+                    <th data-column-id="state" data-formatter="state" data-type="string">{{ lang._('State') }}</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+        </table>
+        <div class="text-muted" style="padding: 0 15px 15px;">
+            {{ lang._('Names: those of the copy fetched, or, marked ~, the count of the catalogue. Memory: what they would take in Unbound, an estimate at about 527 bytes a name, measured on a computer, not on a firewall. Made as: allow list marks a category UT1 made to let names through; chosen here, it is blocked like the others. UT1 asks that its categories be chosen, not all blocked at once.') }}
+        </div>
+    </div>
     <div id="ja4" class="tab-pane">
         <div id="bl-ja4-problem" class="alert alert-warning" role="alert" style="display: none; margin: 15px;"></div>
         <div style="padding: 15px 15px 0;">
@@ -351,6 +536,19 @@
                 <tbody></tbody>
                 <tfoot></tfoot>
             </table>
+        </div>
+    </div>
+    <div id="lookup" class="tab-pane">
+        <div style="padding: 15px;">
+            <form id="bl-lookup-form" class="form-inline">
+                <input type="text" class="form-control" id="bl-lookup-query" maxlength="254" dir="ltr" autocomplete="off"
+                       placeholder="example.com &middot; 192.0.2.10" style="width: 24em; max-width: 100%;">
+                <button class="btn btn-primary" id="lookupAct" type="submit">{{ lang._('Look up') }}</button>
+            </form>
+            <div class="text-muted" style="margin-top: 8px;">
+                {{ lang._('Where a name or an address is held: the pf tables of the lists of this page, the web categories applied, and the blocklist data of Unbound DNS - its own policies and the web categories. Nothing is changed.') }}
+            </div>
+            <div id="bl-lookup-result" style="margin-top: 15px;"></div>
         </div>
     </div>
     <div id="settings" class="tab-pane">
