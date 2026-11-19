@@ -1,6 +1,7 @@
 [
  "%s (%s)",
  "%s (%s): about %s names, %s",
+ "%s (not in the catalogue now)",
  "%s GiB",
  "%s MiB",
  "%s could not be read: %s",

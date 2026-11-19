@@ -101,7 +101,8 @@ LIMIT = 16 << 20                # bytes an archive may have: the largest offered
 UNPACKED = 128 << 20            # bytes its domains file may have: 4.7 MB then
 MAX_NAMES = 1000000             # names an archive may hold: 241,045 the most then; adult 4.6 million
 CATALOGUE_LIMIT = 1 << 20       # bytes global_usage may have: 29,804 then
-CATALOGUE_EVERY = 86400         # global_usage checked once a day
+CATALOGUE_EVERY = 86400         # global_usage checked once a day,
+CATALOGUE_RETRY = 3600          # and within the hour where a category chosen is in no catalogue
 MEMBERS = 64                    # members an archive may have: 4 the most then
 LINE = 1024                     # bytes a line of a domains file may have; a longer one is left out
 RELOAD_TIMEOUT = 900            # seconds configctl unbound dnsbl may take
@@ -716,6 +717,15 @@ def run(now=None, apply=False):
         return {'run': now, 'message': english(status['message'])}
     entries = catalogue()
     chosen = conf['categories'] if conf['enabled'] else []
+    # UT1's catalogue while a category is chosen: once a day; and where one chosen is in no catalogue -
+    # one UT1's catalogue added, which went with /var in memory - at the page's Apply or within the hour,
+    # so it is not refused for good
+    unknown = [cid for cid in chosen if ID.match(cid) and cid not in entries and cid not in REFUSED]
+    known = status['catalogue']
+    if chosen and (now >= max(known.get('checked', 0), known.get('tried', 0)) + CATALOGUE_EVERY or
+                   unknown and (apply or now >= known.get('tried', 0) + CATALOGUE_RETRY)):
+        fetch_catalogue(known, now)
+        entries = catalogue()
     wanted, refused = {}, {}
     for cid in chosen:
         entry = entries.get(cid)
@@ -725,8 +735,6 @@ def run(now=None, apply=False):
             continue
         wanted.setdefault(entry['archive'], []).append(cid)
 
-    if wanted and now >= max(status['catalogue'].get('checked', 0), status['catalogue'].get('tried', 0)) + CATALOGUE_EVERY:
-        fetch_catalogue(status['catalogue'], now)
 
     pace = conf['hours'] * 3600
     outcomes = {}

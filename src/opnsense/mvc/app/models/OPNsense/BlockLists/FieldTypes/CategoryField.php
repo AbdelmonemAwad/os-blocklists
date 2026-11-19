@@ -16,7 +16,9 @@ use OPNsense\Base\FieldTypes\BaseListField;
  * d2, whatever a catalogue says - and never a key that is not a category name. Each option says the
  * category's size where it was counted: its names, and the memory they would take in Unbound, an
  * estimate at bytes_per_name a name (categories.json). A value that is not an option fails the model's
- * validation, as an OptionField's does.
+ * validation, as an OptionField's does - but a category saved that no catalogue holds now (one UT1's
+ * catalogue added, where that catalogue was lost with /var in memory, until categories.py fetches it
+ * again) stays an option, marked so, rather than vanish from the field and from the next save.
  */
 class CategoryField extends BaseListField
 {
@@ -27,6 +29,9 @@ class CategoryField extends BaseListField
     public static $fetched = '/var/db/os-blocklists/categories/catalogue.json';
 
     private static $cache = null;
+
+    /* the categories a catalogue holds that cannot be chosen: never kept as a saved value either */
+    private static $refused = [];
 
     /**
      * a translated format filled, or the English one where the translation's %s do not fit
@@ -67,6 +72,7 @@ class CategoryField extends BaseListField
                 if (in_array($id, self::REFUSED, true) || in_array($archive, self::REFUSED, true) ||
                     !empty($entry['refused'])) {
                     $found[$id] = false;    /* and no later catalogue offers it either */
+                    self::$refused[$id] = true;
                     continue;
                 }
                 /* one line, no control characters and no < or >, as categories.py's plain() makes UT1's text */
@@ -100,6 +106,16 @@ class CategoryField extends BaseListField
         if (self::$cache === null) {
             self::$cache = self::catalogueOptions();
         }
-        $this->internalOptionList = self::$cache;
+        $options = self::$cache;
+        /* a category saved that no catalogue holds now: kept, marked, so it is neither hidden nor dropped */
+        foreach (explode(',', (string)$this->internalValue) as $id) {
+            if (
+                $id !== '' && !isset($options[$id]) && preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/D', $id) &&
+                !in_array($id, self::REFUSED, true) && !isset(self::$refused[$id])
+            ) {
+                $options[$id] = self::fill(gettext('%s (not in the catalogue now)'), '%s (not in the catalogue now)', $id);
+            }
+        }
+        $this->internalOptionList = $options;
     }
 }

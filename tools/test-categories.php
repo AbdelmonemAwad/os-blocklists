@@ -20,9 +20,11 @@ namespace OPNsense\Base\FieldTypes {
     abstract class BaseListField
     {
         protected $internalOptionList = [];
+        protected $internalValue = '';
 
-        public function loaded()
+        public function loaded($value = '')
         {
+            $this->internalValue = $value;
             $this->actionPostLoadingEvent();
             return $this->internalOptionList;
         }
@@ -154,6 +156,11 @@ namespace {
     CategoryField::$fetched = $tmp . '/none.json';
     $field = new CategoryField();
     check(isset($field->loaded()['gambling']) && !isset($field->loaded()['adult']), 'CategoryField: loaded by the model, the same options');
+    $kept = (new CategoryField())->loaded('gambling,newcat,adult,../x,porn');
+    check(($kept['newcat'] ?? '') === 'newcat (not in the catalogue now)' && isset($kept['gambling']) && !isset($kept['adult'])
+        && !isset($kept['../x']), 'CategoryField: a category saved that no catalogue holds now kept as an option, marked; '
+        . 'adult and a name that is not one still not');
+    check(!isset((new CategoryField())->loaded('gambling')['newcat']), 'CategoryField: and only in the field that holds it');
 
     /* the exceptions' mask, as CSVListField applies it to each item: the whole item must match */
     /* read from BlockLists.xml as text: the runner's PHP need not have its XML extension */

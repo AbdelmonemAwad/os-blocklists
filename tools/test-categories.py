@@ -578,8 +578,14 @@ def run_tests(tmp):
     # two hours on: checked again, with If-Modified-Since; 304 - nothing else
     server.requests.clear()
     out = categories.run(now=t0 + 2 * 3600 + 1)
-    check(len(server.requests) == 2 and all(r[1] == 'Wed, 18 Nov 2026 21:50:17 GMT' for r in server.requests),
+    archives = [r for r in server.requests if r[0].endswith('.tar.gz')]
+    check(len(archives) == 2 and all(r[1] == 'Wed, 18 Nov 2026 21:50:17 GMT' for r in archives),
           'run: each archive checked again after two hours, with If-Modified-Since: %r' % (server.requests,))
+    check(server.asked('global_usage') == [(categories.CATALOGUE_URL, 'Sat, 24 Oct 2026 09:09:37 GMT', 'os-blocklists')],
+          'run: nosuch, chosen and in no catalogue - global_usage asked again within the hour, conditionally')
+    server.requests.clear()
+    categories.run(now=t0 + 2 * 3600 + 301)
+    check(server.requests == [], 'run: five minutes on - not asked again, the hour not gone')
     check(out['fetched'] == {'gambling': 'unchanged', 'phishing': 'unchanged'} and len(reloads) == 1,
           'run: 304 - unchanged, and Unbound not rebuilt: %r %d' % (out['fetched'], len(reloads)))
     server.requests.clear()
@@ -663,6 +669,31 @@ def run_tests(tmp):
     mtime = os.stat(categories.STATUS).st_mtime_ns
     categories.run(now=t0 + 11 * 3600 + 600)
     check(os.stat(categories.STATUS).st_mtime_ns == mtime, 'run: a run with nothing to do writes nothing')
+
+    # a category only UT1's catalogue holds, that catalogue lost with /var in memory: fetched again, not
+    # refused for good (2026-11-19 review)
+    server.put('cat03.tar.gz', tar([('cat03/domains', b'three.example\n')]), 'Thu, 19 Nov 2026 12:00:00 GMT')
+    config('cat03')
+    out = categories.run(now=t0 + 12 * 3600, apply=True)
+    check(out['applied'] == ['cat03'], 'run: a category of UT1\'s catalogue only - applied: %r' % (out,))
+    os.unlink(categories.CATALOGUE)
+    server.requests.clear()
+    out = categories.run(now=t0 + 12 * 3600 + 300)
+    check('cat03' not in out['refused'] and out['applied'] == ['cat03'] and server.asked('global_usage')
+          and os.path.exists(categories.CATALOGUE),
+          'run: its catalogue gone - global_usage fetched again at once, the category kept: %r' % (out,))
+    os.unlink(categories.CATALOGUE)
+    server.fail[categories.CATALOGUE_URL] = 503
+    out = categories.run(now=t0 + 12 * 3600 + 600, apply=True)
+    check('cat03' in out['refused'], 'run: its catalogue gone and UT1 answering 503 - refused for now: %r' % (out['refused'],))
+    server.requests.clear()
+    categories.run(now=t0 + 12 * 3600 + 900)
+    check(not server.asked('global_usage'), 'run: and asked again only within the hour, not every run')
+    del server.fail[categories.CATALOGUE_URL]
+    categories.run(now=t0 + 12 * 3600 + 600 + 3601)
+    check(os.path.exists(categories.CATALOGUE) and 'cat03' in categories.catalogue(), 'run: an hour on - fetched, known again')
+    config('malware', enabled='0')
+    categories.run(now=t0 + 12 * 3600 + 600 + 3700, apply=True)
 
     # UT1's maintenance page for global_usage is not its catalogue: the one kept stays
     server.put('global_usage', b'<!DOCTYPE html><html lang="fr"><title>Site en maintenance</title></html>', 'x')
