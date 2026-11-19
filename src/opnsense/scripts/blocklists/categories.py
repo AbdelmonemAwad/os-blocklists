@@ -523,7 +523,7 @@ def fetch(archive, cids, st, now, keep):
         st['error'] = e.text
         return 'failed'
     except OSError as e:
-        st['error'] = str(e)
+        st['error'] = T('not written here: %s', str(e))
         return 'failed'
     st.pop('error', None)
     st.update(checked=now, fetched=now, names=names, ipv4=ipv4, dropped=dropped, sha256=sha, size=got.get('size'))
@@ -588,7 +588,7 @@ def fetch_catalogue(st, now):
         st['error'] = e.text
         return
     except OSError as e:
-        st['error'] = str(e)
+        st['error'] = T('not written here: %s', str(e))
         return
     if len(entries) < 10:
         # UT1's site answers its maintenance page for global_usage now and then (2026-11-19)

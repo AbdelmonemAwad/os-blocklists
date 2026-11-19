@@ -500,7 +500,9 @@ def run_tests(tmp):
     def configctl(*args):
         assert args == ('unbound', 'dnsbl'), args
         reloads.append(json.load(open(categories.ACTIVE)))
-        if core['mode'] == 'sync' and result['done']:
+        if core['busy']:
+            pass        # blocklists.py already running: the one asked for leaves at once, as it does (99)
+        elif core['mode'] == 'sync' and result['done']:
             rebuild()
         elif core['mode'] == 'stale':
             rebuild(core['old'])
@@ -615,6 +617,27 @@ def run_tests(tmp):
           'run: HTTP 500 - the last good copy kept and still applied, Unbound not rebuilt')
     said = categories.english(status['archives']['gambling']['message'])
     check('the last copy is kept' in said and 'HTTP 500' in said, 'run: the page told the copy is kept: %r' % (said,))
+    found = []
+    texts(status['archives']['gambling']['error'], found)
+    texts(status['archives']['gambling']['message'], found)
+    catalogued = set(json.load(open(SOURCE, encoding='utf-8')))
+    check(found and all(isinstance(t, str) and t in catalogued for t in found),
+          'run: the failure kept for the page as T() of catalogued msgids, not English: %r' % (found,))
+    # a failure of this firewall's own disk: the copy kept, said as a T() too
+    real_tempfile = categories.tempfile
+
+    def full(*args, **kwargs):
+        raise OSError(28, 'No space left on device')
+    categories.tempfile = types.SimpleNamespace(TemporaryFile=full, mkstemp=tempfile.mkstemp)
+    try:
+        out = categories.run(now=t0 + 8 * 3600 + 5, apply=True)
+    finally:
+        categories.tempfile = real_tempfile
+    error = json.load(open(categories.STATUS))['archives']['gambling']['error']
+    check(out['fetched'].get('gambling') == 'failed' and isinstance(error, dict) and error['text'] in catalogued
+          and 'No space left' in categories.english(error)
+          and os.path.getsize(os.path.join(state, 'gambling.domains')) > 0,
+          'run: a disk that refuses - the copy kept, the failure a T(): %r' % (error,))
     server.fail[categories.DOWNLOAD + 'gambling.tar.gz'] = 'down'
     server.requests.clear()
     categories.run(now=t0 + 8 * 3600 + 600)
@@ -718,7 +741,7 @@ def run_tests(tmp):
     check('holds the 1 categories' in categories.installed()['message'] and len(reloads) == before + 1
           and policy()['stamp'] == categories.expected(),
           'installed: a new handler - Unbound\'s blocklist rebuilt with it')
-    reload_tests(categories, core, reloads, result, policy, config, state, real_core_busy)
+    reload_tests(categories, core, reloads, result, policy, config, state, real_core_busy, rebuild)
     write(categories.ACTIVE, json.dumps(categories.EMPTY))
     check('left as it is' in categories.installed()['message'], 'installed: none applied - nothing run')
 
@@ -745,7 +768,7 @@ def run_tests(tmp):
 SOURCE = os.path.join(SCRIPTS, 'i18n', 'ui', 'source.json')
 
 
-def reload_tests(categories, core, reloads, result, policy, config, state, real_core_busy):
+def reload_tests(categories, core, reloads, result, policy, config, state, real_core_busy, rebuild_from):
     """A rebuild taken as done only when dnsbl.json says so (2026-11-19 review): configctl answering while
     blocklists.py goes on, past RELOAD_TIMEOUT too; a rebuild of an older ACTIVE; one that wrote nothing;
     nothing applied but the policy still there; an install that found a run going or a rebuild not done."""
@@ -754,14 +777,34 @@ def reload_tests(categories, core, reloads, result, policy, config, state, real_
     # configctl answers at once (its socket's 120 s), blocklists.py goes on: waited for, then read
     config('gambling', exceptions='')
     core['mode'], core['delay'] = 'async', 0.3
+    config('gambling', exceptions='another.example')
     started = time.monotonic()
     categories.run(now=t, apply=True)
     check(status()['reload']['pending'] is False and policy()['stamp'] == categories.expected()
           and time.monotonic() - started >= 0.25,
           'rebuild: configctl answered while blocklists.py went on - its end waited for, the stamp read: done')
+    # a rebuild of another's already running as the run begins, from the older ACTIVE: its end waited for
+    # first - a rebuild asked for meanwhile would leave at once - then this one asked for: done now
+    old = os.path.join(state, 'unbound.json.before')
+    with open(categories.ACTIVE, 'rb') as src, open(old, 'wb') as dst:
+        dst.write(src.read())
+    core['busy'] = True
+
+    def other():
+        time.sleep(0.3)
+        rebuild_from(old)
+        core['busy'] = False
+    running = threading.Thread(target=other)
+    running.start()
+    core['mode'] = 'sync'
+    config('gambling', exceptions='other.example')
+    categories.run(now=t + 150, apply=True)
+    running.join()
+    check(status()['reload']['pending'] is False and policy()['stamp'] == categories.expected(),
+          'rebuild: one already running from the older ACTIVE - waited for first, then rebuilt: done in this run')
     # past RELOAD_TIMEOUT: owed, and the next run finds it done without asking again
     saved, categories.RELOAD_TIMEOUT = categories.RELOAD_TIMEOUT, 0.2
-    core['delay'] = 0.8
+    core['mode'], core['delay'] = 'async', 0.8
     config('gambling', exceptions='example.com')
     categories.run(now=t + 300, apply=True)
     check(status()['reload']['pending'] is True
@@ -870,6 +913,10 @@ def texts_tests(status, page):
     texts(status['message'], found)
     for archive in status['archives'].values():
         texts(archive['message'], found)
+        if 'error' in archive:
+            texts(archive['error'], found)
+    if 'error' in status['catalogue']:
+        texts(status['catalogue']['error'], found)
     for why in status['refused'].values():
         texts(why, found)
     texts(page['message'], found)
