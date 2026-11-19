@@ -199,7 +199,7 @@ def run(tmp):
 
     def resolve(names, wait=3):
         host['resolved'] += 1
-        return {'198.51.100.77/32'} if 'vpn.example.net' in names else set()
+        return {'198.51.100.77/32'} if any(name == 'vpn.example.net' for name in names) else set()
     ids_list.resolve = resolve
     said = []
     ids_list.log = said.append
