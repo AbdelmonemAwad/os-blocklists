@@ -15,6 +15,6 @@
         <type>select_multiple</type>
         <style>tokenize</style>
         <allownew>true</allownew>
-        <help>Names the web categories let through, each with every name under it: example.com lets www.example.com through, and not example.com.evil.net. They apply to the web categories' policy only, as an allowlist in Unbound DNS: Blocklists applies to its own policy only; to let a name through a blocklist of Unbound DNS, allow it there.</help>
+        <help>Names the web categories let through, each with every name under it: example.com lets www.example.com through, and not example.com.evil.net. They apply to the web categories' policy only, as an allowlist in Unbound DNS: Blocklists applies to its own policy only; to let a name through a blocklist of Unbound DNS, allow it there. This field is the way to let a name of a category through: the Allow and Block buttons of Reporting: Unbound DNS do not work on the web categories' names.</help>
     </field>
 </form>

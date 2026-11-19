@@ -224,7 +224,10 @@ Block lists in one place: addresses, DNS names, UT1's web categories, countries 
     as `(.*\.)?<name>$`, as Unbound's module matches it from the start of the name asked for, so
     `example.com` lets `www.example.com` through and not `example.com.evil.net`; a name an exception
     covers is not given to Unbound at all. As an allowlist in Unbound DNS: Blocklists does for its own
-    policy, they apply to this plugin's policy only.
+    policy, they apply to this plugin's policy only. They are the way to let a name of a category
+    through: the Allow and Block buttons of Reporting: Unbound DNS do not work on one, as OPNsense
+    looks for the policy among its own settings (Services: Unbound DNS: Blocklists), where this
+    plugin's is not.
   - *Without Unbound.* Where Unbound DNS is off, the tab says the categories have no effect; nothing
     breaks, and they apply once it is on.
 - **Lookup** (since 2026-11-19) - a name or an address in, every place of these lists that holds it out

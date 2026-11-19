@@ -1154,8 +1154,12 @@ def config_tests():
     ids = [f.findtext('id') for f in form.findall('field')]
     check(ids == ['blocklists.general.categories', 'blocklists.general.exceptions'], 'form: the two fields, %r' % ids)
     help_text = ' '.join(f.findtext('help') for f in form.findall('field'))
-    check('policy only' in help_text and 'Adult cannot be chosen' in help_text and '527 bytes a name' in help_text,
-          'form: the exceptions apply to this policy only; adult cannot be chosen; the estimate said')
+    check('policy only' in help_text and 'Adult cannot be chosen' in help_text and '527 bytes a name' in help_text
+          and 'Allow and Block buttons of Reporting: Unbound DNS do not work' in help_text
+          and 'Allow and Block buttons of Reporting: Unbound DNS do not work' in ' '.join(
+              open(os.path.join(ROOT, 'README.md'), encoding='utf-8').read().split()),
+          'form and README: the exceptions apply to this policy only, and are the way to let a name of a category '
+          'through (Reporting\'s buttons do not work on one); adult cannot be chosen; the estimate said')
     cron = open(os.path.join(SRC, 'etc', 'cron.d', 'blocklists'), encoding='utf-8').read()
     check('*/5 * * * * root /usr/local/opnsense/scripts/blocklists/categories.py > /dev/null 2>&1' in cron,
           'cron: categories.py every five minutes')
