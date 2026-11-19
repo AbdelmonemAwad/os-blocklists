@@ -36,7 +36,9 @@ reads the policy's stamp there: the rebuild is done when it is the stamp of this
 A rebuild that began before ACTIVE was written and ends after it is so told from one that read it.
 
 FETCHING: https://dsi.ut-capitole.fr/blacklists/download/<archive>.tar.gz over HTTPS with the server's
-certificate checked, with If-Modified-Since and If-None-Match where a copy is kept: UT1 answers 304 when
+certificate checked - a redirect followed only to HTTPS on the same host (SameHost), and each download
+ended at DEADLINE whatever the server does (bounded()) - with If-Modified-Since and If-None-Match where a
+copy is kept: UT1 answers 304 when
 it has not changed, which costs nothing and changes nothing here. Malware and phishing are one archive at
 UT1 (the same file, its folder phishing/): one download serves both, one file is kept and its names are
 held once. Of an archive only its <folder>/domains member is read - by its name, a plain file, the one of
@@ -57,6 +59,7 @@ controller translates with OPNsense's catalogue (gettext) and the system log rea
 (english()). Every msgid is a literal of T() here, so tools/check-strings.py finds it and asks for its
 Arabic; the categories' names, descriptions and reasons come from categories.json, which it reads too.
 """
+import contextlib
 import fcntl
 import hashlib
 import http.client
@@ -65,12 +68,15 @@ import json
 import mmap
 import os
 import re
+import signal
 import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 import zlib
@@ -285,7 +291,44 @@ def why_not(cid, entry):
     return None
 
 
-URLOPEN = urllib.request.urlopen
+class SameHost(urllib.request.HTTPRedirectHandler):
+    """Redirects followed only to HTTPS on the host asked, so what is fetched is still fetched over HTTPS
+    with the server's certificate checked, from UT1: one elsewhere, or to plain HTTP, fails the download."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        old, new = urllib.parse.urlsplit(req.full_url), urllib.parse.urlsplit(newurl)
+        if new.scheme != 'https' or (new.hostname or '') != (old.hostname or '') or new.port != old.port:
+            try:
+                fp.close()
+            except Exception:       # noqa: BLE001 - the answer is dropped either way
+                pass
+            raise Failed(T('UT1 redirected to %s: refused', newurl[:120]))
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+# certificates checked as urllib checks them by default (the system's store), redirects as above
+OPENER = urllib.request.build_opener(SameHost)
+URLOPEN = OPENER.open
+
+
+@contextlib.contextmanager
+def bounded(seconds):
+    """A hard end to what is inside: SIGALRM after `seconds` raises Failed, so a server that trickles its
+    answer, or never ends its headers, holds no run - and no lock - past it. Where there is no SIGALRM,
+    or not in the main thread, the time checked between reads is the bound."""
+    if not hasattr(signal, 'SIGALRM') or threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def expire(signum, frame):
+        raise Failed(T('not done within %s s', seconds))
+    previous = signal.signal(signal.SIGALRM, expire)
+    signal.setitimer(signal.ITIMER_REAL, max(0.1, float(seconds)))
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
 
 
 def reason(e):
@@ -304,6 +347,11 @@ def download(url, spool, limit, validators=None):
     for header, value in (validators or {}).items():
         if isinstance(value, str) and VALIDATOR.match(value):
             headers[header] = value
+    with bounded(DEADLINE):
+        return _download(url, spool, limit, headers)
+
+
+def _download(url, spool, limit, headers):
     deadline = time.monotonic() + DEADLINE
     try:
         response = URLOPEN(urllib.request.Request(url, headers=headers), timeout=TIMEOUT)
@@ -327,11 +375,14 @@ def download(url, spool, limit, validators=None):
             value = response.headers.get(header) if response.headers is not None else None
             if isinstance(value, str) and VALIDATOR.match(value.strip()):
                 got[header] = value.strip()
+        # read1: what has come, at once - read(n) waits for n bytes, and a server sending a byte a time
+        # would hold it, deadline or not
+        read = getattr(response, 'read1', None) or response.read
         while True:
             if time.monotonic() > deadline:
                 raise Failed(T('not done within %s s', DEADLINE))
             try:
-                chunk = response.read(1 << 16)
+                chunk = read(1 << 16)
             except (OSError, http.client.HTTPException, ValueError) as e:
                 raise Failed(T('the download broke off: %s', reason(e))) from None
             if not chunk:

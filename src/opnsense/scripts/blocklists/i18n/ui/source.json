@@ -157,6 +157,7 @@
  "Translation",
  "UT1 answered HTTP %s",
  "UT1 not reached: %s",
+ "UT1 redirected to %s: refused",
  "Unbound DNS blocklist",
  "Unbound DNS is off",
  "Unbound DNS is off: the categories have no effect until it is the resolver",

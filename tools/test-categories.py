@@ -28,6 +28,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import sys
 import tarfile
 import tempfile
@@ -35,6 +36,7 @@ import threading
 import time
 import types
 import urllib.error
+import urllib.request
 import xml.etree.ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -52,6 +54,7 @@ if importlib.util.find_spec('syslog') is None:    # Windows: the handler logs wi
     sys.modules['syslog'].LOG_ERR, sys.modules['syslog'].LOG_NOTICE = 3, 5
     sys.modules['syslog'].syslog = lambda *args: None
 import categories    # noqa: E402
+URLOPEN = categories.URLOPEN    # as the script has it, before the tests stand in for UT1's server
 
 FAILED = []
 CHECKS = [0]
@@ -885,6 +888,79 @@ def texts_tests(status, page):
           'texts: every msgid the page is given is in source.json: %r' % (sorted({t for t in found if isinstance(t, str)} - catalogued),))
 
 
+class Trickle:
+    """A server that sends a byte every 50 ms, without end: read1 gives what has come, read(n) would
+    wait for n bytes."""
+    status = 200
+
+    def __init__(self):
+        self.headers = email.message.Message()
+
+    def read1(self, n):
+        time.sleep(0.05)
+        return b'x'
+
+    def read(self, n=-1):
+        raise AssertionError('read(n) waits for n bytes: read1 is to be used')
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def deadline_tests():
+    """A download ended at DEADLINE whatever the server does, and redirects followed only to HTTPS on the
+    same host (2026-11-19 review)."""
+    saved_open, saved_deadline = categories.URLOPEN, categories.DEADLINE
+    categories.DEADLINE = 1
+    categories.URLOPEN = lambda request, timeout=None: Trickle()
+    started = time.monotonic()
+    try:
+        categories.download(categories.DOWNLOAD + 'x.tar.gz', io.BytesIO(), categories.LIMIT)
+        result = 'no failure'
+    except categories.Failed as e:
+        result = categories.english(e.text)
+    took = time.monotonic() - started
+    check(result == 'not done within 1 s' and took < 3,
+          'download: a server trickling a byte at a time - ended at DEADLINE (%.1f s): %r' % (took, result))
+    if hasattr(signal, 'SIGALRM'):
+        def stalled(request, timeout=None):
+            time.sleep(5)       # headers that never end: no read to check the time between
+            return Trickle()
+        categories.URLOPEN = stalled
+        started = time.monotonic()
+        try:
+            categories.download(categories.DOWNLOAD + 'x.tar.gz', io.BytesIO(), categories.LIMIT)
+            result = 'no failure'
+        except categories.Failed as e:
+            result = categories.english(e.text)
+        took = time.monotonic() - started
+        check(result == 'not done within 1 s' and took < 2.5,
+              'download: an answer that never comes - ended by the alarm at DEADLINE (%.1f s): %r' % (took, result))
+        check(signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0),
+              'download: the alarm put away after')
+    categories.URLOPEN, categories.DEADLINE = saved_open, saved_deadline
+    check(URLOPEN == categories.OPENER.open
+          and any(isinstance(h, categories.SameHost) for h in categories.OPENER.handlers)
+          and not any(type(h) is urllib.request.HTTPRedirectHandler for h in categories.OPENER.handlers),
+          'download: through the opener whose redirects are SameHost\'s, and no other redirect handler')
+    request = urllib.request.Request(categories.DOWNLOAD + 'gambling.tar.gz')
+    same = categories.SameHost()
+    for target, ok in (('https://dsi.ut-capitole.fr/blacklists/download/mirror/gambling.tar.gz', True),
+                       ('http://dsi.ut-capitole.fr/blacklists/download/gambling.tar.gz', False),
+                       ('https://evil.example/gambling.tar.gz', False),
+                       ('https://dsi.ut-capitole.fr:8443/gambling.tar.gz', False),
+                       ('ftp://ftp.ut-capitole.fr/pub/gambling.tar.gz', False)):
+        try:
+            followed = same.redirect_request(request, io.BytesIO(), 302, 'Found', email.message.Message(), target)
+            got = followed is not None and followed.full_url == target
+        except categories.Failed as e:
+            got = False if 'refused' in categories.english(e.text) else 'other'
+        check(got is ok, 'redirect to %s: %s' % (target, 'followed' if ok else 'refused'))
+
+
 def catalogue_tests():
     shipped = json.load(open(os.path.join(SCRIPTS, 'categories.json'), encoding='utf-8'))
     cats = shipped['categories']
@@ -990,6 +1066,7 @@ def main():
         unpack_tests(os.path.join(tmp, 'unpack'))
         os.makedirs(os.path.join(tmp, 'run'))
         run_tests(os.path.join(tmp, 'run'))
+        deadline_tests()
         catalogue_tests()
         config_tests()
     finally:

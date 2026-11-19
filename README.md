@@ -179,7 +179,9 @@ Block lists in one place: addresses, DNS names, UT1's web categories, countries 
     is off or removed.
   - *Where they come from, and their licence.* Each category is fetched by the firewall itself, over
     HTTPS with the server's certificate checked, from
-    `https://dsi.ut-capitole.fr/blacklists/download/<category>.tar.gz`; the lists are UT1's, under the
+    `https://dsi.ut-capitole.fr/blacklists/download/<category>.tar.gz` - a redirect followed only to HTTPS
+    on that host, and each download ended at five minutes whatever the server does (an alarm, and the
+    answer read as it comes); the lists are UT1's, under the
     Creative Commons licence [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), credited on
     the page with a link to the licence. This project republishes none of them. The categories offered
     are those of `categories.json`, shipped with the plugin - each with a label and a description in this
