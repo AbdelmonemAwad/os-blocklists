@@ -15,6 +15,11 @@
 # it (a reboot), and fetched again only at abuse.ch's pace: its whole export once a day, its recent
 # additions as often as "Fetch the lists" says. Elsewhere it reads config.xml and exits.
 #
+# Every minute, through the minute: what the Intrusion Detection's IPS policy drops (ids_list.py, ff-10,
+# 2026-11-19), where "Block what the IPS drops" is on - its log read every three seconds, a source it
+# dropped put into blocklists_ids for a while, and taken out when that is over. Off, or the IDS in IDS
+# mode, it reads config.xml, takes out what is held, and exits; never turned on, it makes nothing.
+#
 # Every five minutes: UT1's web categories (categories.py, 2026-11-19), where one is chosen - each checked
 # with UT1 as often as "Fetch the lists" says, with If-Modified-Since, so an unchanged one costs a 304 and
 # nothing else; a changed one unpacked, and Unbound's blocklist rebuilt once. With none chosen and none
@@ -24,3 +29,4 @@
 * * * * * root /usr/local/opnsense/scripts/blocklists/ja4_cut.py --for 58 > /dev/null 2>&1
 */5 * * * * root /usr/local/opnsense/scripts/blocklists/threatfox.py > /dev/null 2>&1
 */5 * * * * root /usr/local/opnsense/scripts/blocklists/categories.py > /dev/null 2>&1
+* * * * * root /usr/local/opnsense/scripts/blocklists/ids_list.py --for 58 > /dev/null 2>&1

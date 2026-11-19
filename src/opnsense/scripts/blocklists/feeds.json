@@ -56,5 +56,12 @@
   "min_hours": 0.5,
   "what": "Addresses reported for attacks on SSH, mail, web and other services in the last 48 hours; IPv4 and IPv6.",
   "terms": "https://www.blocklist.de/en/index.html"
+ },
+ "ids": {
+  "name": "IPS drops",
+  "local": true,
+  "proto": "",
+  "what": "The sources of what the Intrusion Detection's IPS policy dropped over TCP, each for a while after its last drop (Settings: Block what the IPS drops).",
+  "terms": ""
  }
 }

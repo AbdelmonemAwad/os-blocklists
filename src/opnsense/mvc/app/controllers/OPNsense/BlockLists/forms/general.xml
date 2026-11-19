@@ -57,4 +57,22 @@
         <type>text</type>
         <help>Cut every TLS connection whose client shows one of these JA4 fingerprints, separated by commas - it names the program, whatever server it goes to. Read from the Intrusion Detection's TLS log, which must carry the ja4 field; the JA4 tab says what is missing and which fingerprints are seen.</help>
     </field>
+    <field>
+        <id>blocklists.general.ids</id>
+        <label>Block what the IPS drops</label>
+        <type>checkbox</type>
+        <help>Block for a while the source of what the Intrusion Detection's IPS policy drops: each alert it logs as blocked puts the address that sent the dropped traffic into a list of the plugin's own, IPS drops (blocklists_ids), blocked like the other lists in the Direction set here, its open connections cut as Cut open connections says (on a Sophos XGS with os-xgs-npu's Cut in hardware, on the coprocessor too). Only in IPS mode (Netmap or Divert): IDS mode logs nothing as blocked. Only TCP - a UDP or ICMP packet is easily forged with another's address, to have it blocked - and none of Suricata's own decoder, stream and application-layer event rules (signature ids 2200000-2299999), which drop one packet, not a connection. Never an address of the firewall's own, nor loopback, multicast, unspecified or link-local. Taken from the moment it is turned on: nothing logged before. At most 10,000 addresses: past them, those dropped longest ago leave first. Turned off, every address leaves at once. Where /var is kept in memory, a reboot starts the list empty.</help>
+    </field>
+    <field>
+        <id>blocklists.general.ids_minutes</id>
+        <label>Keep an address (minutes)</label>
+        <type>text</type>
+        <help>How long an address stays in IPS drops after the last alert that put it there: 60 minutes by default, 5 to 10080 (a week). Each new drop of it starts the time again.</help>
+    </field>
+    <field>
+        <id>blocklists.general.ids_outside</id>
+        <label>Outside addresses only</label>
+        <type>checkbox</type>
+        <help>Leave out the private addresses - 10/8, 172.16/12, 192.168/16, the shared 100.64/10 (where VPN overlays live too) and IPv6's unique local fc00::/7 - so a false alarm never cuts a device of your own networks off for the time above. Off, a device inside is blocked as well when the IPS drops what it sends.</help>
+    </field>
 </form>

@@ -22,6 +22,10 @@
  * and leaves to the script, and it is made only while an Auth-Key is saved: without one there is
  * nothing to fetch it with, so it is not made - or is removed, as an unchosen list's - and the answer
  * says why.
+ * The IPS drops (feeds.json "local": true, ff-10, 2026-11-19) are no list to choose: ids_list.py fills
+ * blocklists_ids from what the Intrusion Detection's IPS policy drops, while "Block what the IPS drops"
+ * is on. Its alias is an external one, as ThreatFox's, made while that is on and removed (or switched off
+ * where something else names it) when it is not.
  * The block rules are not written here: plugins.inc.d/blocklists.inc registers them from these
  * aliases at every filter reload, so they are never among the owner's own rules.
  *
@@ -77,6 +81,12 @@ if ($on) {
                 'updatefreq' => blocklists_updatefreq($feed, $refresh), 'description' => 'Block Lists: ' . $feed['name'],
             ];
         }
+    }
+    if ((string)($settings->general->ids ?? '0') === '1' && isset($feeds['ids']) && is_array($feeds['ids'])) {
+        $want[PREFIX . 'ids'] = [
+            'type' => 'external', 'content' => '', 'proto' => '', 'updatefreq' => '',
+            'description' => 'Block Lists: ' . $feeds['ids']['name'],
+        ];
     }
     $countries = array_filter(explode(',', (string)$settings->general->countries));
     if (!empty($countries)) {

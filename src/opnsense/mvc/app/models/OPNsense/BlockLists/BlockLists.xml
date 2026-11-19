@@ -16,7 +16,8 @@
                 <Required>Y</Required>
                 <Default>1</Default>
             </enabled>
-            <!-- the ids of scripts/blocklists/feeds.json; a feed added there is added here too -->
+            <!-- the ids of scripts/blocklists/feeds.json; a feed added there is added here too - but for
+                 one filled by the plugin itself ("local", the IPS drops), which has a setting of its own -->
             <feeds type="OptionField">
                 <Multiple>Y</Multiple>
                 <Required>N</Required>
@@ -91,6 +92,27 @@
                 <Mask>/^[\s,]*(t[0-9a-z]{2}[di][0-9]{4}[0-9A-Za-z]{2}_[0-9a-f]{12}_[0-9a-f]{12}([\s,]+t[0-9a-z]{2}[di][0-9]{4}[0-9A-Za-z]{2}_[0-9a-f]{12}_[0-9a-f]{12})*)?[\s,]*$/</Mask>
                 <ValidationMessage>Each fingerprint looks like t13d1516h2_8daaf6152771_02713d6af862, separated by commas.</ValidationMessage>
             </ja4>
+            <!--
+                What the Intrusion Detection's IPS policy drops, blocked and cut for a while (ff-10,
+                2026-11-19): scripts/blocklists/ids_list.py reads these by element name. Off by default; an
+                address kept so many minutes after its last drop; with outside on (the default) never a
+                private one. All three have defaults, so nothing is migrated.
+            -->
+            <ids type="BooleanField">
+                <Required>Y</Required>
+                <Default>0</Default>
+            </ids>
+            <ids_minutes type="IntegerField">
+                <Required>Y</Required>
+                <Default>60</Default>
+                <MinimumValue>5</MinimumValue>
+                <MaximumValue>10080</MaximumValue>
+                <ValidationMessage>Keep an address from 5 minutes to 10080 (a week).</ValidationMessage>
+            </ids_minutes>
+            <ids_outside type="BooleanField">
+                <Required>Y</Required>
+                <Default>1</Default>
+            </ids_outside>
             <!--
                 UT1's web categories chosen (2026-11-19), applied through OPNsense's own Unbound blocklist by
                 scripts/blocklists/categories.py and the handler scripts/unbound/blocklists/blocklists_ut1.py.
