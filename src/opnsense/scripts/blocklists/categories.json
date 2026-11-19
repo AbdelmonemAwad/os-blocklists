@@ -1,0 +1,403 @@
+{
+ "about": "UT1's web categories: the blacklists of Universite Toulouse 1 Capitole, under the Creative Commons licence CC BY-SA 4.0, fetched by the firewall itself; this project republishes none of them. A category's names are the DNS names of its domains file, counted on the day below; its bare IPv4 lines are left out, as DNS cannot use them. The labels and descriptions are this project's own words, each a string the page translates: a description is one short sentence, or none where it would only repeat the label. Where approximate is true the count is not this project's: UT1's own page of 2026-10-08.",
+ "home": "https://dsi.ut-capitole.fr/blacklists/index_en.php",
+ "download": "https://dsi.ut-capitole.fr/blacklists/download/",
+ "licence": "https://creativecommons.org/licenses/by-sa/4.0/",
+ "counted": "2026-11-19",
+ "bytes_per_name": 820,
+ "categories": {
+  "adult": {
+   "name": "Adult",
+   "description": "Erotic and pornographic sites.",
+   "use": "block",
+   "names": 4600371,
+   "approximate": true,
+   "refused": "about 4.6 million names, about 3.5 GiB held by Unbound's blocklist module: too much for a firewall"
+  },
+  "agressif": {
+   "name": "Aggressive",
+   "description": "Sites inciting hatred or violence.",
+   "use": "block",
+   "names": 266
+  },
+  "arjel": {
+   "name": "ARJEL gambling (French)",
+   "description": "Gambling sites certified by a French authority.",
+   "use": "block",
+   "names": 69
+  },
+  "associations_religieuses": {
+   "name": "Religious associations",
+   "description": "",
+   "use": "block",
+   "names": 1
+  },
+  "astrology": {
+   "name": "Astrology",
+   "description": "",
+   "use": "block",
+   "names": 28
+  },
+  "audio-video": {
+   "name": "Audio and video",
+   "description": "",
+   "use": "block",
+   "names": 3620
+  },
+  "bank": {
+   "name": "Banks",
+   "description": "Online banks.",
+   "use": "allow",
+   "names": 6645
+  },
+  "bitcoin": {
+   "name": "Bitcoin mining",
+   "description": "",
+   "use": "block",
+   "names": 1394
+  },
+  "blog": {
+   "name": "Blogs",
+   "description": "",
+   "use": "block",
+   "names": 1497
+  },
+  "celebrity": {
+   "name": "Celebrities",
+   "description": "Famous people and the magazines about them.",
+   "use": "block",
+   "names": 634
+  },
+  "chat": {
+   "name": "Chat",
+   "description": "",
+   "use": "block",
+   "names": 195
+  },
+  "child": {
+   "name": "For children",
+   "description": "Sites fit for children under ten.",
+   "use": "allow",
+   "names": 75
+  },
+  "cleaning": {
+   "name": "Antivirus and cleanup",
+   "description": "Sites to disinfect, update and protect computers.",
+   "use": "allow",
+   "names": 73
+  },
+  "cooking": {
+   "name": "Cooking",
+   "description": "",
+   "use": "block",
+   "names": 37
+  },
+  "cryptojacking": {
+   "name": "Cryptojacking",
+   "description": "Sites that mine cryptocurrency on their visitors' computers.",
+   "use": "block",
+   "names": 11489
+  },
+  "dangerous_material": {
+   "name": "Dangerous material",
+   "description": "How to make explosives, poisons and the like.",
+   "use": "block",
+   "names": 35
+  },
+  "dating": {
+   "name": "Dating",
+   "description": "",
+   "use": "block",
+   "names": 10564
+  },
+  "ddos": {
+   "name": "DDoS services",
+   "description": "DDoS and stresser services.",
+   "use": "block",
+   "names": 421
+  },
+  "dialer": {
+   "name": "Dialers",
+   "description": "",
+   "use": "block",
+   "names": 4
+  },
+  "doh": {
+   "name": "DNS over HTTPS",
+   "description": "Public DNS-over-HTTPS services, which get around the firewall's resolver.",
+   "use": "block",
+   "names": 2995
+  },
+  "download": {
+   "name": "Software downloads",
+   "description": "Sites to download software from.",
+   "use": "allow",
+   "names": 4020
+  },
+  "drogue": {
+   "name": "Drugs",
+   "description": "",
+   "use": "block",
+   "names": 447
+  },
+  "dynamic-dns": {
+   "name": "Dynamic DNS",
+   "description": "",
+   "use": "block",
+   "names": 2077
+  },
+  "educational_games": {
+   "name": "Educational games",
+   "description": "",
+   "use": "allow",
+   "names": 8
+  },
+  "examen_pix": {
+   "name": "PIX exam (French)",
+   "description": "For French students taking the PIX exam only.",
+   "use": "allow",
+   "names": 347
+  },
+  "fakenews": {
+   "name": "Fake news",
+   "description": "",
+   "use": "block",
+   "names": 1118
+  },
+  "filehosting": {
+   "name": "File hosting",
+   "description": "Hosts of pictures, videos and other files.",
+   "use": "block",
+   "names": 940
+  },
+  "financial": {
+   "name": "Financial",
+   "description": "Financial information.",
+   "use": "block",
+   "names": 472
+  },
+  "forums": {
+   "name": "Forums",
+   "description": "",
+   "use": "block",
+   "names": 197
+  },
+  "gambling": {
+   "name": "Gambling",
+   "description": "Casinos, betting and other gambling.",
+   "use": "block",
+   "names": 95180
+  },
+  "games": {
+   "name": "Games",
+   "description": "Online games.",
+   "use": "block",
+   "names": 33715
+  },
+  "hacking": {
+   "name": "Hacking",
+   "description": "",
+   "use": "block",
+   "names": 197
+  },
+  "jobsearch": {
+   "name": "Job search",
+   "description": "",
+   "use": "allow",
+   "names": 60740
+  },
+  "lingerie": {
+   "name": "Lingerie",
+   "description": "",
+   "use": "block",
+   "names": 193
+  },
+  "liste_bu": {
+   "name": "French libraries",
+   "description": "French educational sites, for libraries in France.",
+   "use": "allow",
+   "names": 2810
+  },
+  "malware": {
+   "name": "Malware",
+   "description": "Sites that deliver malware, in one archive with Phishing.",
+   "use": "block",
+   "names": 241045,
+   "archive": "phishing"
+  },
+  "manga": {
+   "name": "Manga",
+   "description": "Manga and cartoons.",
+   "use": "block",
+   "names": 651
+  },
+  "marketingware": {
+   "name": "Marketingware",
+   "description": "Marketing sites UT1 lists apart.",
+   "use": "block",
+   "names": 78
+  },
+  "mixed_adult": {
+   "name": "Mixed adult",
+   "description": "Sites with adult sections among the rest.",
+   "use": "block",
+   "names": 149
+  },
+  "mobile-phone": {
+   "name": "Mobile phones",
+   "description": "Ringtones and other mobile phone content.",
+   "use": "block",
+   "names": 50
+  },
+  "phishing": {
+   "name": "Phishing",
+   "description": "Phishing sites, in one archive with Malware.",
+   "use": "block",
+   "names": 241045
+  },
+  "press": {
+   "name": "Press",
+   "description": "News and the press.",
+   "use": "allow",
+   "names": 4644
+  },
+  "publicite": {
+   "name": "Advertising",
+   "description": "",
+   "use": "block",
+   "names": 4270
+  },
+  "radio": {
+   "name": "Internet radio",
+   "description": "",
+   "use": "block",
+   "names": 561
+  },
+  "reaffected": {
+   "name": "Reassigned domains",
+   "description": "Domains that have changed hands.",
+   "use": "block",
+   "names": 7
+  },
+  "redirector": {
+   "name": "Proxies",
+   "description": "Proxies and redirectors used to get around filtering.",
+   "use": "block",
+   "names": 109793
+  },
+  "remote-control": {
+   "name": "Remote control",
+   "description": "Services that control a computer from afar.",
+   "use": "block",
+   "names": 170
+  },
+  "residential-proxies": {
+   "name": "Residential proxies",
+   "description": "",
+   "use": "block",
+   "names": 121
+  },
+  "sect": {
+   "name": "Sects",
+   "description": "",
+   "use": "block",
+   "names": 143
+  },
+  "sexual_education": {
+   "name": "Sexual education",
+   "description": "Sexual education, which can be taken for adult sites.",
+   "use": "allow",
+   "names": 15
+  },
+  "shopping": {
+   "name": "Shopping",
+   "description": "Shops and selling sites.",
+   "use": "block",
+   "names": 36964
+  },
+  "shortener": {
+   "name": "Link shorteners",
+   "description": "",
+   "use": "allow",
+   "names": 4565
+  },
+  "social_networks": {
+   "name": "Social networks",
+   "description": "",
+   "use": "block",
+   "names": 715
+  },
+  "sports": {
+   "name": "Sports",
+   "description": "",
+   "use": "block",
+   "names": 2362
+  },
+  "stalkerware": {
+   "name": "Stalkerware",
+   "description": "Sellers of software to spy on people.",
+   "use": "block",
+   "names": 525
+  },
+  "strict_redirector": {
+   "name": "Proxies, strict",
+   "description": "For DNS, the same names as Proxies.",
+   "use": "block",
+   "names": 109793
+  },
+  "strong_redirector": {
+   "name": "Proxies, strong",
+   "description": "For DNS, the same names as Proxies.",
+   "use": "block",
+   "names": 109793
+  },
+  "translation": {
+   "name": "Translation",
+   "description": "",
+   "use": "allow",
+   "names": 175
+  },
+  "tricheur": {
+   "name": "Exam cheating",
+   "description": "Sites that explain how to cheat in exams.",
+   "use": "block",
+   "names": 53
+  },
+  "tricheur_pix": {
+   "name": "PIX exam cheating (French)",
+   "description": "Cheating in the French PIX exam, for France only.",
+   "use": "block",
+   "names": 55
+  },
+  "update": {
+   "name": "Updates",
+   "description": "Update sites of software and systems.",
+   "use": "allow",
+   "names": 30
+  },
+  "vpn": {
+   "name": "VPN",
+   "description": "",
+   "use": "block",
+   "names": 6039
+  },
+  "warez": {
+   "name": "Warez",
+   "description": "Pirated software.",
+   "use": "block",
+   "names": 1532
+  },
+  "webhosting": {
+   "name": "Web hosting",
+   "description": "",
+   "use": "block",
+   "names": 47
+  },
+  "webmail": {
+   "name": "Webmail",
+   "description": "",
+   "use": "block",
+   "names": 404
+  }
+ }
+}

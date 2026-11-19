@@ -19,7 +19,7 @@
 
 # Block Lists for OPNsense
 
-Block lists in one place: addresses, DNS names, countries and JA4 fingerprints of TLS clients, gathered into one page - and on a Sophos XGS ~~cut by the coprocessor in hardware~~ a cut connection dropped on the coprocessor at once where os-xgs-npu's "Cut in hardware" is on and outbound is blocked too, and else taken out of it with its state (the coprocessor holds no address list of its own to block by - os-xgs-npu's hardware-drop research, issue 519).
+Block lists in one place: addresses, DNS names, UT1's web categories, countries and JA4 fingerprints of TLS clients, gathered into one page - and on a Sophos XGS ~~cut by the coprocessor in hardware~~ a cut connection dropped on the coprocessor at once where os-xgs-npu's "Cut in hardware" is on and outbound is blocked too, and else taken out of it with its state (the coprocessor holds no address list of its own to block by - os-xgs-npu's hardware-drop research, issue 519).
 
 > ~~**Planned - nothing here runs yet.** This repository was opened on 2026-10-22 to hold
 > Block Lists as a plugin of its own. No code has been written or moved into it, and there is no
@@ -161,7 +161,89 @@ Block lists in one place: addresses, DNS names, countries and JA4 fingerprints o
   Intrusion Detection's TLS log every two seconds (`ja4_cut.py`); the page lists the fingerprints
   seen, to find the one to list (those in the log's last 64 MB, since 2026-10-29);
 - **DNS lists** - OPNsense keeps them itself, in Unbound DNS: Blocklists; the page shows them beside
-  the others and links there.
+  the others and links there;
+- **web categories** (since 2026-11-19, not yet on a firewall: [What is tested](#what-is-tested)) - the
+  categories of web sites of UT1, Université Toulouse 1 Capitole (its blacklists: gambling, phishing,
+  proxies, advertising and some sixty more), chosen on the **Web categories** tab and blocked by DNS:
+  - *Through OPNsense's own Unbound blocklist, the owner's settings untouched.* The plugin puts a
+    handler, `blocklists_ut1.py`, beside OPNsense's own in `/usr/local/opnsense/scripts/unbound/blocklists/`,
+    as Deciso's os-q-feeds-connector does with its own. OPNsense's `blocklists.py` (`configctl unbound
+    dnsbl`) runs every handler there and merges what each gives into `/var/unbound/data/dnsbl.json`,
+    which Unbound reads within a minute, without a restart. The handler gives one policy of the plugin's
+    own beside the owner's: no setting or policy of Services: Unbound DNS: Blocklists is added, changed
+    or shown there. The policy is for every client (no source network) and answers as a policy of
+    Unbound DNS: Blocklists answers by default: `0.0.0.0`, with NOERROR - not NXDOMAIN. A name of UT1's
+    means that name and every name under it, so each is given as a wildcard entry; a name two chosen
+    categories hold is held once. The handler reads only what the plugin wrote, never stops OPNsense's
+    update (a file missing or unreadable is left out, the rest given), and gives nothing once the plugin
+    is off or removed.
+  - *Where they come from, and their licence.* Each category is fetched by the firewall itself, over
+    HTTPS with the server's certificate checked, from
+    `https://dsi.ut-capitole.fr/blacklists/download/<category>.tar.gz` - a redirect followed only to HTTPS
+    on that host, and each download ended at five minutes whatever the server does (an alarm, and the
+    answer read as it comes); the lists are UT1's, under the
+    Creative Commons licence [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), credited on
+    the page with a link to the licence. This project republishes none of them. The categories offered
+    are those of `categories.json`, shipped with the plugin - each with a label and a description in this
+    project's own words, UT1's default use (block or allow list) and its names, counted on 2026-11-19
+    from each category's `domains` file - and those UT1's own catalogue, `global_usage`, adds where it can
+    be read: the plugin fetches it once a day while a category is chosen. On 2026-11-19 UT1's site,
+    under maintenance, answered its maintenance page for `global_usage` (the archives were served), and
+    that page is not taken for a catalogue. Malware and phishing are one archive at UT1, the same file
+    under its folder `phishing/`: chosen together, they are fetched once and held once.
+  - *How big each is.* The page shows each category's names and the memory they would take in Unbound:
+    an estimate, at about 820 bytes a name, as measured on an XGS 3300 with OPNsense 26.7.9
+    (2026-11-19): Unbound held 265 MiB with Phishing and Malware's 241,045 names and 73 MiB with none,
+    each 90 seconds after a restart (818 bytes a name); while it reloads a changed list it holds the old
+    and the new for a moment (344 MiB at the peak, measured every second). The largest on 2026-11-19:
+    Phishing and Malware 241,045 names (~189 MiB), the three Proxies 109,793 each, the same names
+    (~86 MiB), Gambling 95,180 (~74 MiB), Job search 60,740 (~47 MiB), Shopping 36,964 (~29 MiB), Games
+    33,715 (~26 MiB); most hold a few thousand or fewer.
+  - *Adult is left out*: about 4.6 million names (UT1's own page, 2026-10-08), about 3.5 GiB held by
+    Unbound's module - too much for a firewall. The page shows it greyed, with that reason; the model
+    does not offer it, and `categories.py` and the handler refuse it whatever config.xml says. Any
+    archive of more than a million names is refused too.
+  - *Fetched as the lists are.* `categories.py` runs from cron every five minutes and checks each chosen
+    category with UT1 as often as "Fetch the lists" says - every two hours by default - with
+    If-Modified-Since (and If-None-Match where UT1 gives an ETag): unchanged, UT1 answers 304, which
+    costs nothing and changes nothing. A changed one is unpacked - of the archive only its
+    `<category>/domains` member, by that name, a plain file and only one, nothing written where the
+    archive says; its names are written, lowercased and each once, into
+    `/var/db/os-blocklists/categories/<archive>.domains`, and its bare IPv4 lines left out, as DNS
+    cannot use them - and Unbound's blocklist is rebuilt once a run, only when something the handler
+    reads changed. A rebuild counts as done when `dnsbl.json` says so, not when configctl answers
+    (configctl gives up on its socket after 120 s and answers 0 while OPNsense's `blocklists.py` goes
+    on, and `blocklists.py` leaves at once, writing nothing, while another update runs): the handler
+    stamps its policy with the SHA-256 of its own source and of what it read, OPNsense copies the
+    policy into `dnsbl.json` whole, and the script waits - 15 minutes at the most - while `blocklists.py`
+    holds its lock, then reads that stamp; a rebuild not done, or done from an older state, is done
+    again at the next run. The page's Apply runs it at once, in the background. A download that fails keeps the
+    last good copy, and the tab says so; a category no longer chosen, or Block Lists turned off, is taken
+    out at the next run. With none chosen the script contacts no one; on a firewall where none was ever
+    chosen it makes nothing - no folder, no file - and once what was applied is taken out it writes
+    nothing more (its folder, `/var/db/os-blocklists/categories`, keeps its lock file and its last
+    state).
+  - *Exceptions.* Names let through, each with every name under it: written into the policy's passlist
+    as `(.*\.)?<name>$`, as Unbound's module matches it from the start of the name asked for, so
+    `example.com` lets `www.example.com` through and not `example.com.evil.net`; a name an exception
+    covers is not given to Unbound at all. As an allowlist in Unbound DNS: Blocklists does for its own
+    policy, they apply to this plugin's policy only. They are the way to let a name of a category
+    through: the Allow and Block buttons of Reporting: Unbound DNS do not work on one, as OPNsense
+    looks for the policy among its own settings (Services: Unbound DNS: Blocklists), where this
+    plugin's is not.
+  - *Without Unbound.* Where Unbound DNS is off, the tab says the categories have no effect; nothing
+    breaks, and they apply once it is on.
+- **Lookup** (since 2026-11-19) - a name or an address in, every place of these lists that holds it out
+  (`lookup.py`, read only): for an address, each of the plugin's pf tables that holds it (`pfctl -t
+  <table> -T test <address>`); for a name, the web categories applied that hold it or a name above it,
+  with the exception that lets it through, and Unbound's own blocklist data - `dnsbl.json`, searched where
+  it lies, never loaded whole - each entry for the name, or for a name above it where that entry is a
+  wildcard one: for the web categories' policy, the entry and whether an exception lets the name
+  through; for a policy of Unbound DNS: Blocklists, only that it holds the name, and its description -
+  not its networks, its lists, its entries or its allowlist, since the tab is open to whoever may see
+  Block Lists, who need not be allowed to see Unbound's settings. A name is not resolved, and not looked
+  up in pf's tables, which hold addresses. What is looked up is checked twice before anything runs - by the page's controller and by
+  the script: a host name, or an IPv4 or IPv6 address, nothing else.
 
 ~~a page in the XGS section of OPNsense's menu~~ - it is under **Firewall**, beside Aliases and Rules
 (under **XGS** when os-xgs-npu is installed): it writes the one and adds to the other, and it is not
@@ -247,6 +329,21 @@ hardware`). Without os-xgs-npu nothing changes.
   coprocessor with its state, and with os-xgs-npu's "Cut in hardware" on and outbound blocked too
   (Both ways) it is dropped there first ([Beside os-xgs-npu](#beside-os-xgs-npu)) - a connection,
   not the list.
+
+- **web categories are DNS only** - a client that asks another resolver than the firewall's Unbound, or
+  uses DNS over HTTPS or over TLS, is not filtered by them (the category DNS over HTTPS lists public
+  DoH services, to block that way round), and neither is a connection made straight to an address, HTTPS
+  by IP among them. UT1's `urls` and `expressions` are not used: DNS cannot. The categories are UT1's,
+  as UT1 publishes them, and are not checked here; UT1 asks that its categories be chosen, not all
+  blocked at once. One policy for every client: per network and per user it is phase 4 (top-04).
+- **an exception can let a name through an owner's broader wildcard** - Unbound's module decides at the
+  first entry it meets, the name's own first and then each name above it: where a category holds
+  `www.example.com`, an exception is `a.www.example.com` and one of the owner's policies holds all of
+  `example.com`, the category's entry and its exception let `a.www.example.com` through before the
+  owner's is reached. That is OPNsense's matching; a name an exception covers is not given to Unbound,
+  which keeps every other case to the owner's policies.
+- **the memory a category takes** is an estimate from a PC; the largest category allowed is to be
+  measured on a firewall.
 
 ## What is tested
 
@@ -360,6 +457,76 @@ key, and the table and the inside rule with ThreatFox's addresses.
 Still not tested: the snapshot written only when its table changed, the log read a line at a time,
 the field refusing all but `t` fingerprints, the checks before the copy, and the removal.
 
+The web categories and the Lookup tab (2026-11-19) are tested by the checks only - not on a firewall,
+and not against UT1's server. `tools/test-categories.py` runs the handler against a copy of OPNsense
+26.7.9's `BaseBlocklistHandler` and of the part of its `blocklists.py` and Unbound module that merges and
+matches the policies: one policy, wildcard entries, bare IPv4 lines, comments and blank lines left out,
+each name once, the exceptions anchored (`example.com` passes `www.example.com`, not
+`example.com.evil.net`), adult refused though the handler's file names it, a file missing, a folder or a
+link left out and the rest given; and `categories.py` with a stand-in for UT1's server: an archive's
+member taken by its name only (links, folders, paths that climb out, a second copy refused), the
+conditional request (304: Unbound's blocklist not rebuilt), malware and phishing one download, adult
+never fetched though written into config.xml by hand, the last good copy kept on a failure, a category
+unchosen and Block Lists off taken out, a rebuild that did not happen tried again. `tools/test-lookup.py`
+answers the plan's three - a name a UT1 category holds, an address in a listed table, a name in
+nothing - and refuses shell metacharacters, a name with spaces and an empty one; `tools/test-categories.php`
+runs the model's field and masks. After a review the same day the checks also run: a rebuild counted
+done only by the stamp in `dnsbl.json`, against a stand-in of `blocklists.py` that runs the handler -
+configctl answering while it goes on, a rebuild longer than the timeout, one of an older state, one that
+wrote nothing, a new handler after an install; the removers' own loop with `lockf`, configctl and the
+files stood in for - a rebuild running that writes the policy back, ones that leave at once; a download
+that trickles, one that never answers, redirects to plain HTTP or another host; a category only UT1's
+catalogue holds, that catalogue lost; nothing made or written with none chosen; the Lookup tab showing a
+policy of the owner's by its description only; and every text the page is given a catalogued msgid
+(`tools/check-strings.py` reads the scripts, the PHP and `categories.json` too). The handler's stamp
+was also run through OPNsense 26.7.9's own `blocklists` package and Unbound module (not in this
+repository): it reaches `dnsbl.json`, and matching is unchanged. The counts of `categories.json` were
+read on 2026-11-19 from the archives UT1 served that day; Gambling, counted again from its archive
+(448,522 bytes, 2026-11-18 21:50 UTC), holds 95,180 distinct names - none under another of them - and
+14 bare IPv4 lines: UT1's page gave 46,123 on 2026-10-08, when its `domains` file was about half the size
+(865,619 bytes in a mirror of 2026-10-12, 1,665,954 now).
+
+On an XGS 3300 and an XGS 136, 2026-11-19, OPNsense 26.7.9 with Unbound DNS as the
+resolver and no blocklist policy of its own, this branch's files over release 1.0.3 (config.xml, the
+configuration backups and Unbound's `dnsbl.json` kept first and put back after - config.xml as before,
+the backups as many as before, no `dnsbl.json`, as there was none):
+
+- Gambling chosen and applied from the firewall's own fetch of UT1 in 4 s (10 s on the XGS 136):
+  95,180 names in `dnsbl.json` under the policy "Block Lists: web categories (UT1)" beside Unbound's
+  own; a name of it and a name under it answered 0.0.0.0, a name in no category its real address.
+- `pokerstars.com` in the exceptions: it and `www.pokerstars.com` answered their real addresses,
+  `bet365.com` still 0.0.0.0, and the excepted name not given to Unbound (95,179 names).
+- Unbound's own blocklist rebuild (`configctl unbound dnsbl`, as its page's Apply runs it): the
+  policy kept.
+- The Lookup tab, through its configd action: an address in a Spamhaus DROP network - the table
+  that holds it; `www.bet365.com` - Gambling as a name under `bet365.com`, and the web categories'
+  policy in Unbound's data; `pokerstars.com` - Gambling, let through by its exception, and in no
+  policy; `opnsense.org` - nowhere; `a;id`, `x y` and an empty one refused. On the page (Arabic and
+  English): the same answer for `www.bet365.com`.
+- Malware chosen (241,045 names, one archive with Phishing): applied in 7 s. Unbound's memory, each
+  90 seconds after a restart of Unbound: 265 MiB with it and 73 MiB with none on the XGS 3300 (818
+  bytes a name), 242 MiB and 52 MiB on the XGS 136 (809 bytes a name); a reload of the same data
+  peaked at 344 MiB on the XGS 3300, sampled every second. `bet365.com` was blocked under Malware
+  too: UT1 lists it there as well.
+- Categories turned off: their names answered their real addresses again, and the policy left
+  Unbound's data.
+- The page: the Web categories tab with 64 categories to choose, each with its names and memory,
+  Adult in the table, greyed, "cannot be chosen" with its reason, Apply and its last run. Found
+  there and changed in this branch: the memory estimate (527 bytes a name, measured on a PC) now the
+  firewall's 820; Adult's reason cut by the grid's one line - wrapped; a Latin comma in the Lookup
+  tab's Arabic - one translated format. The JA4 card's text ("cut by TLS fingerprint: ...") reaches an
+  Arabic page in English: from release 1.0.3's `ja4_cut.py`, not changed here.
+
+Not tried on a firewall: a removal of the plugin (`install/uninstall.sh` and the package's) with
+categories applied - the checks run the removers' own loop.
+
+| Web categories (Arabic) | Lookup (Arabic) |
+| --- | --- |
+| ![The Web categories tab, in Arabic](docs/images/categories/categories-ar.png) | ![The Lookup tab, in Arabic](docs/images/categories/lookup-ar.png) |
+
+In English: [Web categories](docs/images/categories/categories-en.png),
+[Lookup](docs/images/categories/lookup-en.png).
+
 ## Installation
 
 It is not in the OPNsense plugin repository, so there is no `pkg install os-blocklists`.
@@ -387,7 +554,14 @@ Apply removes each alias of the plugin's that nothing else names (one that a rul
 names is switched off instead). The removal itself, by the script or by pkg, stops a cut that is
 running, deletes what the cuts kept in `/var/db/os-blocklists`, and empties the pf table of each of
 the plugin's aliases that is gone, when no rule uses it - a table outlives its alias, and went on
-holding the addresses (all of this since 2026-10-29).
+holding the addresses (all of this since 2026-10-29). Since 2026-11-19 it also removes the web
+categories' handler from OPNsense's folder of Unbound blocklist handlers - by its own name, never the
+folder - with what Python compiled of it there, deletes the categories fetched, and rebuilds Unbound's
+blocklist (`configctl unbound dnsbl`) while it still holds the plugin's policy, so nothing of the
+plugin's stays in Unbound. An install or an update rebuilds it only where categories are applied and
+`dnsbl.json` was not written by the handler just installed (its stamp holds the handler's source); where
+a run of the script is going on, or the rebuild is not done, it is owed to the next run, within five
+minutes.
 
 **From a release's package.** A release carries `os-blocklists-<version>.pkg` and `SHA256SUMS`,
 built by `tools/make-package.sh` in the release workflow; ~~installing it has not been tested yet~~
@@ -446,4 +620,7 @@ It is one part of the [os-xgs-npu](https://github.com/AbdelmonemAwad/os-xgs-npu)
 ## Licence
 
 BSD 2-Clause - see [LICENSE](LICENSE). The lists are their publishers', under their own terms, linked
-from the page; the plugin fetches them and redistributes none.
+from the page; the plugin fetches them and redistributes none. The web categories are UT1's
+(Université Toulouse 1 Capitole), under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/),
+fetched by each firewall from UT1 itself; `categories.json` holds their names and sizes, and labels and
+descriptions in this project's own words, not UT1's lists.

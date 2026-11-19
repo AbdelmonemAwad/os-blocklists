@@ -8,6 +8,7 @@
 namespace OPNsense\BlockLists\Api;
 
 use OPNsense\Base\ApiControllerBase;
+use OPNsense\BlockLists\BlockLists;
 use OPNsense\Core\Backend;
 
 class ServiceController extends ApiControllerBase
@@ -18,9 +19,26 @@ class ServiceController extends ApiControllerBase
         return is_array($result) ? $result : ['error' => gettext('No answer could be read.')];
     }
 
+    /**
+     * a msgid of categories.json (a category's name or description) translated, or '' kept ''
+     */
+    private function catalogued($text)
+    {
+        $text = (string)$text;
+        return $text === '' ? '' : gettext($text);
+    }
+
+    /**
+     * the page's status; the web categories' line made a text of the page's language (BlockLists::text())
+     */
     public function statusAction()
     {
-        return $this->json('status');
+        $status = $this->json('status');
+        if (isset($status['categories']) && is_array($status['categories'])) {
+            $status['categories']['message'] = BlockLists::text($status['categories']['message'] ?? []);
+            unset($status['categories']['rows'], $status['categories']['refused']);
+        }
+        return $status;
     }
 
     public function seenAction()
@@ -71,6 +89,73 @@ class ServiceController extends ApiControllerBase
     }
 
     /**
+     * the Web categories tab's grid: every category offered, chosen or not, as the status script reads it
+     * (scripts/blocklists/categories.py, page()) - its names, the memory they would take in Unbound (an
+     * estimate), its state, and why one cannot be chosen
+     */
+    public function searchCategoriesAction()
+    {
+        $rows = [];
+        foreach (($this->json('status')['categories']['rows'] ?? []) as $row) {
+            $rows[] = [
+                'id' => (string)($row['id'] ?? ''),
+                'name' => $this->catalogued($row['name'] ?? ''),
+                'description' => $this->catalogued($row['description'] ?? ''),
+                'use' => ($row['use'] ?? '') === 'allow' ? 'allow' : 'block',
+                'names' => isset($row['names']) ? (int)$row['names'] : null,
+                'approximate' => !empty($row['approximate']),
+                'counted' => !empty($row['counted']),
+                'memory' => isset($row['memory']) ? (int)$row['memory'] : null,
+                'refused' => BlockLists::text($row['refused'] ?? ''),
+                'chosen' => !empty($row['chosen']),
+                'applied' => !empty($row['applied']),
+                'state' => BlockLists::text($row['state'] ?? ''),
+            ];
+        }
+        return $this->searchRecordsetBase($rows, ['id', 'name', 'description', 'state']);
+    }
+
+    /**
+     * The Lookup tab (2026-11-19): every place of the block lists that holds a name or an address -
+     * this plugin's pf tables for an address; the web categories applied and Unbound's blocklist data
+     * for a name (scripts/blocklists/lookup.py). Read only. The query is checked here before it goes
+     * anywhere - an address, or a host name - and again by the script; configd hands it over quoted.
+     */
+    public function lookupAction()
+    {
+        if (!$this->request->isPost()) {
+            return ['error' => 'POST only'];
+        }
+        $query = trim((string)$this->request->getPost('query'));
+        $host = '/^(?=.{1,253}\.?$)[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?' .
+            '(?:\.[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?)*\.?$/D';
+        if ($query === '' || strlen($query) > 254 ||
+            (filter_var($query, FILTER_VALIDATE_IP) === false && !preg_match($host, $query))) {
+            return ['error' => gettext('Enter a name, such as example.com, or an address.')];
+        }
+        $result = json_decode((new Backend())->configdpRun('blocklists lookup', [$query]), true);
+        if (!is_array($result)) {
+            return ['error' => gettext('No answer could be read.')];
+        }
+        /* the script's texts in the page's language: its errors, and the categories' names */
+        if (isset($result['error'])) {
+            $result['error'] = BlockLists::text($result['error']);
+        }
+        foreach (['tables', 'categories', 'unbound'] as $part) {
+            if (isset($result[$part]['errors']) && is_array($result[$part]['errors'])) {
+                $result[$part]['errors'] = array_map([BlockLists::class, 'text'], $result[$part]['errors']);
+            }
+        }
+        foreach (($result['categories']['held'] ?? []) as $i => $held) {
+            $result['categories']['held'][$i]['name'] = $this->catalogued($held['name'] ?? '');
+        }
+        foreach (($result['tables']['held'] ?? []) as $i => $held) {
+            $result['tables']['held'][$i]['list'] = BlockLists::text($held['list'] ?? '');
+        }
+        return $result;
+    }
+
+    /**
      * the JA4 tab's grid: the fingerprints in the IDS's TLS log now, the most frequent first
      */
     public function searchSeenAction()
@@ -90,7 +175,8 @@ class ServiceController extends ApiControllerBase
      * the aliases from the settings just saved, then the filter (which registers the rules) and the
      * aliases (which fetches the lists) reloaded the way Firewall: Aliases reloads them, ThreatFox's
      * list fetched in the background (threatfox.py --apply: a download may take minutes, and Apply
-     * does not wait for it), then a first round of cutting
+     * does not wait for it), the web categories fetched and applied to Unbound in the background too
+     * (categories.py --apply, 2026-11-19), then a first round of cutting
      */
     public function applyAction()
     {
@@ -106,6 +192,7 @@ class ServiceController extends ApiControllerBase
         $backend->configdRun('template reload OPNsense/Filter');
         $backend->configdRun('filter refresh_aliases');
         $backend->configdRun('blocklists threatfox', true);
+        $backend->configdRun('blocklists categories', true);
         $result['cut'] = json_decode($backend->configdRun('blocklists cut'), true);
         $result['ja4'] = json_decode($backend->configdRun('blocklists ja4'), true);
         return $result;

@@ -38,6 +38,13 @@ fi
 # the rules hook is read at a filter reload; an upgrade's new hook takes effect now
 [ -f /usr/local/sbin/configctl ] && /usr/local/sbin/configctl filter reload > /dev/null 2>&1 || true
 
+# Where web categories are applied, Unbound's blocklist rebuilt (configctl unbound dnsbl), so the handler
+# the package just put in OPNsense's folder of Unbound blocklist handlers is the one its data comes from;
+# where none is, nothing is run. Nothing is fetched here. install/install.sh runs the same.
+if [ -x /usr/local/opnsense/scripts/blocklists/categories.py ]; then
+	/usr/local/opnsense/scripts/blocklists/categories.py --installed || true
+fi
+
 # The page's place in the menu: the XGS section where os-xgs-npu is installed, Firewall where it is
 # not. The menu file is not one of the package's files; place-menu.sh writes it and says which it
 # chose.

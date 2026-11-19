@@ -33,10 +33,32 @@ rm -f /var/lib/php/tmp/opnsense_menu_cache.xml /tmp/opnsense_menu_cache.xml
 # cuts kept in /var/db - each list's snapshot, where the JA4 watch is in the log. Left, an old snapshot
 # hid from a reinstall the connections it should cut (2026-10-29). The scripts' directories go once empty.
 rm -rf /usr/local/opnsense/scripts/blocklists/__pycache__ /var/db/os-blocklists
+# What Python compiled of the web categories' handler (2026-11-19), in OPNsense's own folder of Unbound
+# blocklist handlers, whose handler pkg removed: by its own name, never the folder, which holds OPNsense's.
+rm -f /usr/local/opnsense/scripts/unbound/blocklists/__pycache__/blocklists_ut1.*.pyc
 [ -d /usr/local/opnsense/scripts/blocklists ] &&
     find /usr/local/opnsense/scripts/blocklists -depth -type d -empty -delete 2> /dev/null
 
 [ -f /usr/local/sbin/configctl ] && /usr/local/sbin/configctl filter reload > /dev/null 2>&1 || true
+
+# Unbound's blocklist rebuilt without the web categories' policy, its handler and data being gone, until
+# it no longer holds it: nothing of the plugin's stays in Unbound, which reads the new file within a minute.
+# OPNsense's blocklists.py runs one at a time and leaves at once, writing nothing, while another runs; and
+# one running now may have read the handler before it went, and would write the policy back as it ends.
+# So each try first waits for a running one to end - lockf on its lock file, up to 15 minutes, -k so the
+# file is left as it is - and dnsbl.json is read again only then. Five rebuilds at the most; where it
+# still holds the policy after them, this says so.
+tries=0
+while [ -f /usr/local/sbin/configctl ]; do
+	[ -x /usr/bin/lockf ] && /usr/bin/lockf -k -t 900 /tmp/unbound-download_blocklists.tmp true > /dev/null 2>&1
+	grep -qF f188da6c-137b-41dd-b504-fe5d96a73483 /var/unbound/data/dnsbl.json 2> /dev/null || break
+	if [ "${tries}" -ge 5 ]; then
+		echo "Block Lists: Unbound's blocklist still holds the web categories' policy; Apply in Services: Unbound DNS: Blocklists takes it out"
+		break
+	fi
+	/usr/local/sbin/configctl unbound dnsbl > /dev/null 2>&1 || true
+	tries=$((tries + 1))
+done
 
 # The pf tables of the plugin's aliases that are gone - an Apply with Block Lists off removes them -
 # emptied, when no rule uses them: a table outlives its alias and its rules, and went on holding the

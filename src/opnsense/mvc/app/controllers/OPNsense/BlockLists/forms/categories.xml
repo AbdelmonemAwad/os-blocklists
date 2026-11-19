@@ -1,0 +1,20 @@
+<!--
+    SPDX-License-Identifier: BSD-2-Clause
+    Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+-->
+<form>
+    <field>
+        <id>blocklists.general.categories</id>
+        <label>Web categories</label>
+        <type>select_multiple</type>
+        <help>UT1's categories of web sites, blocked by DNS through OPNsense's own Unbound blocklist, in a policy of this plugin's for every client: a name of a category chosen, and every name under it, is answered 0.0.0.0 as Unbound DNS: Blocklists answers by default. Each category says its size: its names, and the memory they would take in Unbound - an estimate, at about 820 bytes a name, as measured on a firewall. Adult cannot be chosen: about 4.6 million names, about 3.5 GiB in Unbound, too much for a firewall. The firewall fetches each category chosen from UT1 and checks it again as often as Fetch the lists says, in the Settings tab; the table below says what each one holds. It works only where Unbound DNS is the resolver the clients use, and while Block Lists is on.</help>
+    </field>
+    <field>
+        <id>blocklists.general.exceptions</id>
+        <label>Exceptions</label>
+        <type>select_multiple</type>
+        <style>tokenize</style>
+        <allownew>true</allownew>
+        <help>Names the web categories let through, each with every name under it: example.com lets www.example.com through, and not example.com.evil.net. They apply to the web categories' policy only, as an allowlist in Unbound DNS: Blocklists applies to its own policy only; to let a name through a blocklist of Unbound DNS, allow it there. This field is the way to let a name of a category through: the Allow and Block buttons of Reporting: Unbound DNS do not work on the web categories' names.</help>
+    </field>
+</form>

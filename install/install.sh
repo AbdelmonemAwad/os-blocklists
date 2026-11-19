@@ -35,7 +35,11 @@ cp -R "${HERE}/src/" /usr/local/
 chmod 644 /usr/local/opnsense/scripts/blocklists/release-keys/*.pub
 chmod 755 /usr/local/opnsense/scripts/blocklists/*.py /usr/local/opnsense/scripts/blocklists/apply.php \
     /usr/local/opnsense/scripts/blocklists/fetch-frequency.php /usr/local/opnsense/scripts/blocklists/place-menu.sh
-chmod 644 /usr/local/opnsense/scripts/blocklists/feeds.json /usr/local/opnsense/scripts/blocklists/i18n/ui/source.json
+chmod 644 /usr/local/opnsense/scripts/blocklists/feeds.json /usr/local/opnsense/scripts/blocklists/i18n/ui/source.json \
+    /usr/local/opnsense/scripts/blocklists/categories.json
+# The web categories' handler (2026-11-19), in OPNsense's own folder of Unbound blocklist handlers: a
+# module OPNsense's blocklists.py imports, not a script, as OPNsense's own handlers there are.
+chmod 644 /usr/local/opnsense/scripts/unbound/blocklists/blocklists_ut1.py
 chmod 644 /usr/local/etc/cron.d/blocklists /usr/local/etc/inc/plugins.inc.d/blocklists.inc
 chmod 644 /usr/local/opnsense/service/conf/actions.d/actions_blocklists.conf
 
@@ -58,6 +62,9 @@ rm -f /var/lib/php/tmp/opnsense_menu_cache.xml /var/lib/php/tmp/opnsense_acl_cac
 # Before the filter reload, which hands the aliases' settings to OPNsense's alias updater.
 /usr/local/opnsense/scripts/blocklists/fetch-frequency.php || true
 configctl filter reload > /dev/null 2>&1 || true
+# Where web categories are applied, Unbound's blocklist rebuilt (configctl unbound dnsbl), so the handler
+# just copied is the one its data comes from; where none is, nothing is run. Nothing is fetched here.
+/usr/local/opnsense/scripts/blocklists/categories.py --installed || true
 
 # What this install is, for the self-update: the commit, from a git checkout, or from the
 # .source-commit stamp that an xgs-image-builder image or the self-update leaves in the tree.

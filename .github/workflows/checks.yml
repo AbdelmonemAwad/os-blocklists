@@ -76,6 +76,27 @@ jobs:
       - name: ThreatFox's alias made only with a key
         run: php tools/test-threatfox.php
 
+      # UT1's web categories: the Unbound handler against a copy of OPNsense's BaseBlocklistHandler (one
+      # policy, wildcard entries, the exceptions anchored, adult refused, a bad file left out and the rest
+      # given), and categories.py against a stand-in for UT1's server (an archive's domains member taken by
+      # its name only, 304 rebuilding nothing, malware and phishing one download, the last good copy kept).
+      - name: The web categories reach Unbound, and only what they should
+        run: python3 tools/test-categories.py
+
+      # The model's field for them (adult never offered) and the masks of the exceptions and the lookup.
+      - name: The web categories' field and masks
+        run: php tools/test-categories.php
+
+      # The Lookup tab: a name of a UT1 category, an address in a listed table, a name in nothing - and
+      # anything that is not a name or an address refused before it reaches a command.
+      - name: The Lookup tab answers, and takes names and addresses only
+        run: python3 tools/test-lookup.py
+
+      # Every file the installer lays down is removed by the uninstaller, and none of OPNsense's with it:
+      # the web categories' handler sits in OPNsense's own folder of Unbound handlers.
+      - name: The removal takes everything of the plugin's, and nothing of OPNsense's
+        run: sh tools/check-uninstall.sh
+
   syntax:
     name: syntax
     runs-on: ubuntu-latest

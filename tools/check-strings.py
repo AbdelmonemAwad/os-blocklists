@@ -20,6 +20,7 @@ The Arabic is in opnsense-arabic's catalogue since 2026-10-22 (tools/arabic_cata
 catalogued string with no Arabic there fails - except on a contributor's pull request and on main,
 where its Arabic may follow later and it is a warning (ARABIC_LATER, below).
 """
+import ast
 import glob
 import json
 import os
@@ -82,8 +83,29 @@ if os.path.exists(os.path.join(scripts, 'alerts.py')):
     mail = set(alerts.mail_strings())
     shared = set(alerts.page_strings())
 
+# The page's texts that come from the scripts, the model and a data file rather than from a .volt
+# (2026-11-19): the msgids of T('...') in the scripts (categories.py, lookup.py), which the page's
+# controller translates (BlockLists::text()); those of gettext('...') in the plugin's PHP; and the web
+# categories' names, descriptions and reasons in categories.json, which the field and the controller
+# translate. Read from the source itself, as the mail's are, so there is no second list to forget; one
+# not catalogued is fatal, as it would reach an Arabic page in English with nothing else to say so.
+SCRIPT_T = re.compile(r"""\bT\(\s*('(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*")""")
+PHP_GETTEXT = re.compile(r"""\bgettext\(\s*'((?:[^'\\]|\\.)*)'\s*[,)]""")
+code = set()
+for path in sorted(glob.glob(base + '*/*.py')):
+    for literal in SCRIPT_T.findall(open(path, encoding='utf-8').read()):
+        code.add(ast.literal_eval(literal))
+for path in sorted(glob.glob('src/opnsense/mvc/app/**/*.php', recursive=True)):
+    for raw in PHP_GETTEXT.findall(open(path, encoding='utf-8').read()):
+        code.add(raw.replace(BS + Q, Q).replace(BS + BS, BS))
+for path in sorted(glob.glob(base + '*/categories.json')):
+    for entry in (json.load(open(path, encoding='utf-8')).get('categories') or {}).values():
+        code.update(entry.get(k) for k in ('name', 'description', 'refused') if entry.get(k))
+code.discard('')
+coded = sorted(code - src)
+
 absent = sorted(used - src)
-stale = sorted(src - used - mail)
+stale = sorted(src - used - mail - code)
 missing = sorted(k for k in src if not ar.get(k))
 uncatalogued = sorted(mail - src)
 drifted = sorted(shared - used)
@@ -107,9 +129,13 @@ for key in uncatalogued:
 print('the mail says this and the page no longer does: %d' % len(drifted))
 for key in drifted:
     print('   ! ' + key[:100])
+print('from the scripts, the PHP and categories.json (%d) but not catalogued: %d' % (len(code), len(coded)))
+for key in coded:
+    print('   + ' + key[:100])
 
 # The two faults that make a message lie are fatal, and so is a catalogued string with no
 # Arabic - a step of the workflow enforced that one until 2026-10-22 - unless ARABIC_LATER is
-# set, where it is a warning. The other two counts are reported and not enforced, as they
-# always were: the form XML and the PHP say plenty that no .volt asks for, and that is not a bug.
-sys.exit(1 if uncatalogued or drifted or (missing and not LATER) else 0)
+# set, where it is a warning; and, since 2026-11-19, a text of the scripts, the PHP or
+# categories.json not catalogued. The other two counts are reported and not enforced, as they
+# always were: the form XML says plenty that no .volt asks for, and that is not a bug.
+sys.exit(1 if uncatalogued or drifted or coded or (missing and not LATER) else 0)
