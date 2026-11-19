@@ -61,6 +61,9 @@ foreach (iterator_to_array($model->aliases->alias->iterateItems()) as $uuid => $
 }
 ' > /dev/null 2>&1 || true
 [ -f /usr/local/sbin/configctl ] && /usr/local/sbin/configctl filter reload > /dev/null 2>&1 || true
+# The IPS drops' table emptied, whatever names its alias: its addresses are the plugin's, held for a while,
+# and nothing else fills it - a rule of the owner's naming it keeps the alias (switched off), not them.
+/sbin/pfctl -t blocklists_ids -T flush > /dev/null 2>&1 || true
 
 # Unbound's blocklist rebuilt without the web categories' policy, its handler and data being gone, until
 # it no longer holds it: nothing of the plugin's stays in Unbound, which reads the new file within a minute.

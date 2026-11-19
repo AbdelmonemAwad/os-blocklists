@@ -7,9 +7,10 @@
  * What the IPS drops (ff-10, 2026-11-19) on the PHP side: apply.php makes the alias blocklists_ids, an
  * external one, while "Block what the IPS drops" is on, and removes it when it is off or Block Lists is;
  * and the removers' own step (install/uninstall.sh, pkg/post-deinstall.sh) takes it out of config.xml,
- * run as they run it - its text taken from each - so no alias, and so no table, of it stays. OPNsense's
- * classes are stood in for by a script/load_phalcon.php of this test's own on the include path; no
- * OPNsense needed:
+ * run as they run it - its text taken from each - or, with a config.xml where a rule of the owner's names
+ * it, switches it off; and each remover's next line empties its table either way (the review of
+ * 2026-11-19), run with pfctl stood in for. OPNsense's classes are stood in for by a
+ * script/load_phalcon.php of this test's own on the include path; no OPNsense needed:
  *
  *   php tools/test-ids.php
  */
@@ -193,6 +194,43 @@ foreach (['install/uninstall.sh', 'pkg/post-deinstall.sh'] as $remover) {
         "$remover: the IPS drops' alias taken out and config.xml saved; the other aliases left: " . json_encode(array_keys($aliases ?? [])));
     [$aliases, $printed] = run_php($stub, $script, [], $others);
     check($aliases === null && strpos($printed, 'STUB saved') === false, "$remover: no such alias - nothing saved");
+
+    /* with a config.xml, as on a firewall: where a rule of the owner's names the alias, or its uuid, it is
+       switched off and kept; where only its own entry names it, taken out */
+    $config = $stub . '/config.xml';
+    $code = file_get_contents($script);
+    check(substr_count($code, '"/conf/config.xml"') === 1, "$remover: its step reads /conf/config.xml");
+    file_put_contents($script, str_replace('"/conf/config.xml"', var_export($config, true), $code));
+    $entry = '<alias uuid="u-ids"><name>blocklists_ids</name><type>external</type></alias>';
+    foreach ([
+        'a rule naming it' => ['<filter><rule><source><address>blocklists_ids</address></source></rule></filter>', '0'],
+        'a rule naming its uuid' => ['<filter><rule><source><network>u-ids</network></source></rule></filter>', '0'],
+        'only its own entry' => ['', null],
+    ] as $case => [$rules, $enabled]) {
+        file_put_contents($config, "<opnsense>$rules<OPNsense><Firewall><Alias><aliases>$entry</aliases></Alias></Firewall></OPNsense></opnsense>\n");
+        [$aliases, $printed] = run_php($stub, $script, [], $others + $there);
+        $ids = $aliases['blocklists_ids'] ?? null;
+        check(is_array($aliases) && isset($aliases['blocklists_feodo']) && strpos($printed, 'STUB saved') !== false
+            && ($enabled === null ? $ids === null : ($ids['enabled'] ?? '') === $enabled),
+            "$remover, config.xml with $case: " . ($enabled === null ? 'taken out' : 'switched off, kept') . ': ' . json_encode($ids));
+    }
+    unlink($config);
+
+    /* then the table emptied, whatever the step did: the remover's own line, run with pfctl stood in for */
+    $line = "/sbin/pfctl -t blocklists_ids -T flush > /dev/null 2>&1 || true";
+    $text_after = substr($text, $end);
+    check(strpos($text_after, "\n$line\n") !== false && strpos($text_after, 'filter reload') < strpos($text_after, $line),
+        "$remover: the table emptied after the filter reload, on its own line - no condition before it");
+    $fake = $stub . '/pfctl';
+    $record = $stub . '/pfctl.log';
+    file_put_contents($fake, "#!/bin/sh\necho \"\$*\" >> " . escapeshellarg($record) . "\n");
+    chmod($fake, 0755);
+    @unlink($record);
+    exec('/bin/sh -c ' . escapeshellarg(str_replace('/sbin/pfctl', $fake, $line)), $out, $rc);
+    check($rc === 0 && trim((string)@file_get_contents($record)) === '-t blocklists_ids -T flush',
+        "$remover: its line run: pfctl -t blocklists_ids -T flush");
+    @unlink($record);
+    @unlink($fake);
 }
 
 array_map('unlink', glob($stub . '/script/*'));

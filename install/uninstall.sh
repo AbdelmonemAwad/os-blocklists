@@ -75,6 +75,9 @@ foreach (iterator_to_array($model->aliases->alias->iterateItems()) as $uuid => $
 }
 ' > /dev/null 2>&1 || true
 configctl filter reload > /dev/null 2>&1 || true
+# The IPS drops' table emptied, whatever names its alias: its addresses are the plugin's, held for a while,
+# and nothing else fills it - a rule of the owner's naming it keeps the alias (switched off), not them.
+/sbin/pfctl -t blocklists_ids -T flush > /dev/null 2>&1 || true
 # The pf tables of the plugin's aliases that are gone - an Apply with Block Lists off removes them -
 # emptied, when no rule uses them: a table outlives its alias and its rules, and went on holding the
 # addresses (2026-10-29). A table whose alias is still in Firewall: Aliases is OPNsense's to keep, and
