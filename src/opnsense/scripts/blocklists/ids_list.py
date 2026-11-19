@@ -86,15 +86,19 @@ EVENT_SIDS = range(2200000, 2300000)
 
 
 def network(text):
+    """A network as RFCs write them, IPv4 shortened: '10/8' is 10.0.0.0/8 (as threatfox.py writes them)."""
+    if ':' not in text:
+        address, length = text.split('/')
+        text = '.'.join((address.split('.') + ['0', '0', '0'])[:4]) + '/' + length
     return ipaddress.ip_network(text)
 
 
-# never entered: no host has them, or every host does
-NEVER = [network(n) for n in (
-    '0.0.0.0/8', '127.0.0.0/8', '169.254.0.0/16', '224.0.0.0/4', '240.0.0.0/4',
-    '::/128', '::1/128', 'fe80::/10', 'ff00::/8')]
-# a network of the owner's own, left out with "Outside addresses only"
-PRIVATE = [network(n) for n in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10', 'fc00::/7')]
+# never entered: no host has them, or every host does - this network, loopback, link-local, multicast,
+# reserved and broadcast; IPv6's unspecified, loopback, link-local and multicast
+NEVER = [network(n) for n in ('0/8', '127/8', '169.254/16', '224/4', '240/4', '::/128', '::1/128', 'fe80::/10', 'ff00::/8')]
+# a network of the owner's own, left out with "Outside addresses only": RFC 1918, shared (RFC 6598, VPN
+# overlays too) and IPv6's unique local
+PRIVATE = [network(n) for n in ('10/8', '172.16/12', '192.168/16', '100.64/10', 'fc00::/7')]
 INET = re.compile(r'^\s+inet6?\s+([0-9A-Fa-f:.]+)(%\S+)?(\s|$)')
 
 
