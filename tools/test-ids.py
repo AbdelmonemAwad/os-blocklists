@@ -163,7 +163,9 @@ def run(tmp):
     answer = quiet_main('--remove', '198.51.100.1')
     check(not os.path.exists(state) and answer['removed'] is False, 'off and never on: nothing to take out, nothing made')
 
-    # turned on: from the log's end - what was logged before is not taken
+    # turned on: from the log's end - what was logged before is not taken, even a line stamped a little
+    # ahead (a clock of Suricata's that runs early): it is not read at all
+    log(alert('198.51.100.2', T0 + 1))
     config()
     os.makedirs(state)
     w = ids_list.Watch()
@@ -179,6 +181,7 @@ def run(tmp):
         alert('198.51.100.10', T0 + 2, sid=2210020),                     # Suricata's stream event rule
         alert('198.51.100.11', T0 + 2, sid=2200074),                     # its decoder event rule
         alert('198.51.100.12', T0 + 2, action='allowed'),                # IDS mode: logged, not blocked
+        alert('198.51.100.13', T0 + 2, action='allowed', msg='blocked'),  # "blocked" in its text, not its action
         alert('203.0.113.1', T0 + 2),                                    # the firewall's own
         alert('2001:db8:1::1', T0 + 2),                                  # the firewall's own, IPv6
         alert('192.168.1.20', T0 + 2),                                   # private: Outside addresses only
@@ -241,8 +244,9 @@ def run(tmp):
     check('198.51.100.7' not in entries and '2001:db8:5::7' not in entries and '198.51.100.30' in entries
           and pf.table == set(entries), 'its time over: out of the list and the table; one dropped later still in')
     log(alert('198.51.100.30', T0 + 3000))
-    w.once(now=T0 + 3600 + 20)
-    check(entries['198.51.100.30']['until'] == T0 + 3600 + 20 + 3600, 'dropped again: its time starts again')
+    w.once(now=T0 + 3605)
+    check(entries['198.51.100.30']['until'] == T0 + 3605 + 3600 and entries['198.51.100.30']['count'] == 2,
+          'dropped again before its time was over: its time starts again')
 
     # a rotation: the new log from its start; what it holds from before turning on is not taken
     os.replace(ids_list.EVE, ids_list.EVE + '.0')
