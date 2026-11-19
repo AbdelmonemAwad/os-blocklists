@@ -33,10 +33,24 @@ rm -f /var/lib/php/tmp/opnsense_menu_cache.xml /tmp/opnsense_menu_cache.xml
 # cuts kept in /var/db - each list's snapshot, where the JA4 watch is in the log. Left, an old snapshot
 # hid from a reinstall the connections it should cut (2026-10-29). The scripts' directories go once empty.
 rm -rf /usr/local/opnsense/scripts/blocklists/__pycache__ /var/db/os-blocklists
+# What Python compiled of the web categories' handler (2026-11-19), in OPNsense's own folder of Unbound
+# blocklist handlers, whose handler pkg removed: by its own name, never the folder, which holds OPNsense's.
+rm -f /usr/local/opnsense/scripts/unbound/blocklists/__pycache__/blocklists_ut1.*.pyc
 [ -d /usr/local/opnsense/scripts/blocklists ] &&
     find /usr/local/opnsense/scripts/blocklists -depth -type d -empty -delete 2> /dev/null
 
 [ -f /usr/local/sbin/configctl ] && /usr/local/sbin/configctl filter reload > /dev/null 2>&1 || true
+
+# Unbound's blocklist rebuilt without the web categories' policy, its handler and data being gone, where
+# it still holds it: nothing of the plugin's stays in Unbound, which reads the new file within a minute.
+# OPNsense's blocklists.py leaves when another update runs, so it is tried again, three times at most.
+tries=0
+while [ -f /usr/local/sbin/configctl ] && grep -qF f188da6c-137b-41dd-b504-fe5d96a73483 /var/unbound/data/dnsbl.json 2> /dev/null &&
+    [ "${tries}" -lt 3 ]; do
+	[ "${tries}" -gt 0 ] && sleep 10
+	/usr/local/sbin/configctl unbound dnsbl > /dev/null 2>&1 || true
+	tries=$((tries + 1))
+done
 
 # The pf tables of the plugin's aliases that are gone - an Apply with Block Lists off removes them -
 # emptied, when no rule uses them: a table outlives its alias and its rules, and went on holding the
