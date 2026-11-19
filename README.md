@@ -160,7 +160,7 @@ Block lists in one place: addresses, DNS names, UT1's web categories, countries 
 - **JA4** - TLS connections whose client shows a listed fingerprint are cut, read from the
   Intrusion Detection's TLS log every two seconds (`ja4_cut.py`); the page lists the fingerprints
   seen, to find the one to list (those in the log's last 64 MB, since 2026-10-29);
-- **what the IPS drops, blocked and cut for a while** (since 2026-11-19, not yet on a firewall: [What is
+- **what the IPS drops, blocked and cut for a while** (since 2026-11-19, tried on an XGS 3300: [What is
   tested](#what-is-tested)) - with "Block what the IPS drops" on (Settings; off by default), the source of
   each alert the Intrusion Detection logs as blocked on a connection it saw established - its IPS policy
   dropped what that address sent - goes into a list of the plugin's own, **IPS drops** (`blocklists_ids`),
@@ -593,8 +593,7 @@ categories applied - the checks run the removers' own loop.
 In English: [Web categories](docs/images/categories/categories-en.png),
 [Lookup](docs/images/categories/lookup-en.png).
 
-What the IPS drops (2026-11-19) is tested by the checks only - not on a firewall, and not with Suricata.
-`tools/test-ids.py` runs `ids_list.py` against an `eve.json` written as Suricata writes its alerts, with
+What the IPS drops (2026-11-19) is tested by the checks and on a firewall. `tools/test-ids.py` runs `ids_list.py` against an `eve.json` written as Suricata writes its alerts, with
 pf (its table and states), `ifconfig`, `/tmp`'s gateway and prefix files, `resolv.conf`, name resolution
 and the system log stood in for: a TCP drop's source on an established connection in, IPv4, IPv6 and
 IPv4-mapped; a lone SYN, a blind ACK, a connection whose protocol was not recognised or with packets one
@@ -612,12 +611,46 @@ on, nothing from before; taking one out at once, after the reading that saw it d
 the minute's run holds the lock; the table put back after it lost its addresses; the minute's run taking a
 drop logged while it runs, and waiting for the last one to end. `tools/test-ids.php` runs apply.php's
 alias for it and each remover's own step taking it out - and switching it off where a rule names it - and
-the test runs each remover's line emptying its table. To be done on a firewall before this is merged:
-Suricata in IPS mode with a local rule that drops on an established connection - the alert's `app_proto`
-and `flow` counts as expected, its source in the table within seconds, its other connections cut (on the
-coprocessor where os-xgs-npu is installed), and out again after the time set; a scan's SYN dropped and not
-entered; IDS mode said on the tab; a private source and the GUI's own manager left out; the grid's button;
-and a removal leaving no alias, table or state.
+the test runs each remover's line emptying its table.
+
+On an XGS 3300, 2026-11-19, OPNsense 26.7.9 with os-xgs-npu, this branch's files over release 1.0.3, the
+Intrusion Detection (Suricata 8.0) turned on in IPS mode (netmap) on one interface for the test, with a
+local rules file: one rule dropping an HTTP request on an established connection, one dropping a lone SYN;
+a client on that interface's network (config.xml, the configuration backups and the Intrusion Detection's
+settings kept first and put back after - config.xml as before, the backups as many, Suricata stopped as it
+was found, the rules file gone, no table of the list left):
+
+- What Suricata writes: the HTTP drop - `"action":"blocked"`, `app_proto` `http`, `flow` 3 packets to
+  the server and 1 back; the lone SYN - `"action":"blocked"`, no `app_proto`, 3 packets to the server
+  (its retries) and none back. So both of what the plugin asks are needed: the SYN alone passes the
+  first count.
+- Outside addresses only on: the SYN's source refused 3 times ("a connection not seen established: no
+  application protocol recognised"), the HTTP drop's source refused as inside the firewall's networks.
+- Outside addresses only off: the source in `blocklists_ids` 2 to 3 seconds after its drop, its 7 pf
+  states cut to none and its connection dropped on the coprocessor (cut.py: "1 connection dropped in
+  hardware"); blocked both ways meanwhile; out of the table when its 5 minutes were over, and answered
+  again at once.
+- Taken out by the grid's button (a click on the page) and by its configd action: out at once.
+- Never block: an address held left within 3 seconds of being written there, and a new drop of it was
+  refused ("in Never block"). An address holding a connection to the firewall's SSH port: refused ("...
+  or an address managing it").
+- Turned off: the table emptied and the alias and its rules gone at once.
+- The tab, in Arabic and English. Found there and changed in this branch: the tab's line said "0
+  addresses held" above a grid holding one - it was the record of a run's end, written once a minute; it
+  counts the state as it is now. The grid's remove button never showed - its column was named
+  `commands`, which OPNsense's grid keeps for its own buttons; the dates and the drop count were cut by
+  their columns.
+
+Not tried on a firewall: a removal of the plugin with a rule of the owner's naming `blocklists_ids`
+(the checks run each remover's own lines for it), Divert mode, an IPv6 source, and the reader's cost on a
+busy log.
+
+| IPS drops (Arabic) | Settings (Arabic) |
+| --- | --- |
+| ![The IPS drops tab, in Arabic](docs/images/ips-drops/ips-drops-ar.png) | ![The IPS drops settings, in Arabic](docs/images/ips-drops/ips-settings-ar.png) |
+
+In English: [IPS drops](docs/images/ips-drops/ips-drops-en.png),
+[Settings](docs/images/ips-drops/ips-settings-en.png).
 
 ## Installation
 
