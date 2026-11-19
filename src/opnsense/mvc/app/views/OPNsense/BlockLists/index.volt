@@ -353,33 +353,37 @@
         /* The Lookup tab: a name or an address, and every place of the block lists that holds it */
         function lookup_show(data) {
             const $out = $('#bl-lookup-result').empty();
-            if (!data || data.error) {
-                $out.append($('<div class="alert alert-warning" role="alert"/>').text(plain(data && data.error ? data.error :
-                    "{{ lang._('No answer could be read.') }}")));
+            /* a failed request hands the callback what it has - nothing, an error, or the request itself */
+            if (!data || data.error || !data.kind) {
+                $out.append($('<div class="alert alert-warning" role="alert"/>').text(plain(data && typeof data.error === 'string' ?
+                    data.error : "{{ lang._('No answer could be read.') }}")));
                 return;
             }
             const $list = $('<ul/>');
             const errors = [];
+            const tables = data.tables || {};
+            const cats = data.categories || {};
+            const unbound = data.unbound || {};
             if (data.kind === 'address') {
-                $.each(data.tables.held || [], function (i, t) {
+                $.each(tables.held || [], function (i, t) {
                     $list.append($('<li/>').text(plain("{{ lang._('pf table') }}" + ' ' + t.alias + (t.list ? ' (' + t.list + ')' : ''))));
                 });
-                errors.push.apply(errors, data.tables.errors || []);
+                errors.push.apply(errors, tables.errors || []);
             } else {
-                $.each(data.categories.held || [], function (i, c) {
+                $.each(cats.held || [], function (i, c) {
                     $list.append($('<li/>').text(plain("{{ lang._('Web category') }}" + ' ' + c.name + ' (' + c.id + ')' +
                         (c.entry !== data.query ? ', ' + "{{ lang._('as a name under') }}" + ' ' + c.entry : '') +
                         (c.exception ? ' - ' + "{{ lang._('let through by the exception') }}" + ' ' + c.exception : ''))));
                 });
-                $.each(data.unbound.held || [], function (i, u) {
-                    $list.append($('<li/>').text(plain("{{ lang._('Unbound DNS blocklist') }}" + ': ' +
-                        (u.mine ? "{{ lang._('the policy of the web categories') }}" : "{{ lang._('a policy of Unbound DNS: Blocklists') }}") +
-                        (u.description ? ' "' + u.description + '"' : '') +
-                        (u.entry !== data.query ? ', ' + "{{ lang._('as a name under') }}" + ' ' + u.entry : '') +
-                        (u.source_nets && u.source_nets.length ? ', ' + "{{ lang._('for clients in') }}" + ' ' + u.source_nets.join(' ') : '') +
-                        (u.passes ? ' - ' + "{{ lang._('its allowlist lets it through') }}" : ''))));
+                /* the policy of the web categories with its entry; a policy of the owner's by its description only */
+                $.each(unbound.held || [], function (i, u) {
+                    $list.append($('<li/>').text(plain("{{ lang._('Unbound DNS blocklist') }}" + ': ' + (u.mine ?
+                        "{{ lang._('the policy of the web categories') }}" +
+                            (u.entry !== data.query ? ', ' + "{{ lang._('as a name under') }}" + ' ' + u.entry : '') +
+                            (u.passes ? ' - ' + "{{ lang._('let through by an exception') }}" : '') :
+                        "{{ lang._('a policy of Unbound DNS: Blocklists') }}" + (u.description ? ' "' + u.description + '"' : '')))));
                 });
-                errors.push.apply(errors, (data.categories.errors || []).concat(data.unbound.errors || []));
+                errors.push.apply(errors, (cats.errors || []).concat(unbound.errors || []));
             }
             $out.append($('<div/>').append($('<b dir="ltr"/>').text(plain(data.query))).append(document.createTextNode(': ' +
                 plain(data.found ? "{{ lang._('held in these places') }}" : "{{ lang._('held nowhere in these block lists') }}"))));

@@ -76,6 +76,7 @@ def dnsbl(pretty=False):
         'ads.example': [{'bl': 'custom1', 'wildcard': False, 'idx': OWNER}],
         'tracker.example': [{'bl': 'hgz002', 'wildcard': True, 'idx': OWNER},
                             {'bl': 'ut1_publicite', 'wildcard': True, 'idx': lookup.categories.POLICY}],
+        'a.tracker.example': [{'bl': 'custom2', 'wildcard': False, 'idx': OWNER}],
     }
     for i in range(20000):
         data['filler%05d.example' % i] = [{'bl': 'custom1', 'wildcard': True, 'idx': OWNER}]
@@ -148,12 +149,16 @@ def main():
         check(under['categories']['held'][0]['exception'] == 'safe.casino.example' and under['unbound']['held'][0]['passes'] is True,
               'an exception lets every name under it through')
         ads = lookup.lookup('ads.example')
-        check([(u['entry'], u['mine'], u['description'], u['source_nets']) for u in ads['unbound']['held']]
-              == [('ads.example', False, 'Office', ['198.51.100.0/24'])],
-              'an exact entry of the owner\'s: his policy, its description and network: %r' % (ads['unbound'],))
+        check(ads['unbound']['held'] == [{'mine': False, 'description': 'Office'}],
+              'an entry of the owner\'s: only that his policy holds it, by its description - not its network, its '
+              'list, its entry or its allowlist: %r' % (ads['unbound'],))
+        check('198.51.100.0/24' not in json.dumps(ads) and 'custom1' not in json.dumps(ads) and 'localhost' not in json.dumps(ads)
+              and OWNER not in json.dumps(ads), 'an entry of the owner\'s: nothing of his policy\'s settings in the answer')
         check(lookup.lookup('x.ads.example')['unbound']['held'] == [], 'a name under an exact entry: not held (only wildcards count)')
         both = lookup.lookup('a.tracker.example')
         check(sorted(u['mine'] for u in both['unbound']['held']) == [False, True], 'a wildcard entry of two policies: both told')
+        check([u for u in both['unbound']['held'] if not u['mine']] == [{'mine': False, 'description': 'Office'}],
+              'a policy of the owner\'s holding the name and a name above it: told once: %r' % (both['unbound'],))
         check(lookup.lookup('phish.example')['categories']['held'] == [
             {'id': 'malware', 'name': 'Malware', 'entry': 'phish.example', 'exception': ''},
             {'id': 'phishing', 'name': 'Phishing', 'entry': 'phish.example', 'exception': ''}],
@@ -220,6 +225,12 @@ def main():
     check("ajaxCall('/api/blocklists/service/lookup', {'query': query}" in volt and 'id="bl-lookup-query"' in volt
           and '.text(plain(' in volt[volt.find('function lookup_show'):volt.find("$('#bl-lookup-form')")],
           'the page: the Lookup tab posts the query, and shows the answer as text')
+    shown = volt[volt.find('function lookup_show'):volt.find("$('#bl-lookup-form')")]
+    check("if (!data || data.error || !data.kind) {" in shown and "const tables = data.tables || {};" in shown
+          and "const cats = data.categories || {};" in shown and "const unbound = data.unbound || {};" in shown
+          and 'data.tables.' not in shown and 'data.categories.' not in shown and 'data.unbound.' not in shown,
+          'the page: a failed request (no kind) is a warning, and no part of the answer is read unguarded')
+    check('source_nets' not in shown, 'the page: no network of the policies of the owner shown')
 
     print('%d of %d checks failed' % (len(FAILED), CHECKS[0]) if FAILED else '%d checks passed' % CHECKS[0])
     return 1 if FAILED else 0

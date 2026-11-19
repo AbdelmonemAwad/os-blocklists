@@ -221,9 +221,11 @@ Block lists in one place: addresses, DNS names, UT1's web categories, countries 
   <table> -T test <address>`); for a name, the web categories applied that hold it or a name above it,
   with the exception that lets it through, and Unbound's own blocklist data - `dnsbl.json`, searched where
   it lies, never loaded whole - each entry for the name, or for a name above it where that entry is a
-  wildcard one, with its policy: this plugin's or one of the owner's, its description, and whether its
-  allowlist lets the name through. A name is not resolved, and not looked up in pf's tables, which hold
-  addresses. What is looked up is checked twice before anything runs - by the page's controller and by
+  wildcard one: for the web categories' policy, the entry and whether an exception lets the name
+  through; for a policy of Unbound DNS: Blocklists, only that it holds the name, and its description -
+  not its networks, its lists, its entries or its allowlist, since the tab is open to whoever may see
+  Block Lists, who need not be allowed to see Unbound's settings. A name is not resolved, and not looked
+  up in pf's tables, which hold addresses. What is looked up is checked twice before anything runs - by the page's controller and by
   the script: a host name, or an IPv4 or IPv6 address, nothing else.
 
 ~~a page in the XGS section of OPNsense's menu~~ - it is under **Firewall**, beside Aliases and Rules

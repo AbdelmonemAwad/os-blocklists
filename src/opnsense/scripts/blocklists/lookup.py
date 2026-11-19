@@ -12,9 +12,10 @@ names: an address is not looked up there.
 A NAME: the UT1 categories applied (categories.py's files) that hold it or a parent of it - a UT1 name
 means every subdomain - and the exception that lets it through this plugin's policy, where one does; and
 Unbound's own blocklist data, /var/unbound/data/dnsbl.json, read and never written: each entry for the
-name, and for a parent of it where the entry is a wildcard one, as Unbound's module matches them, with
-the policy it is in - this plugin's or one of the owner's - its description, and whether that policy's
-allowlist lets the name through. The file may hold millions of names; it is searched where it lies
+name, and for a parent of it where the entry is a wildcard one, as Unbound's module matches them: for
+this plugin's policy, the entry and whether its exceptions let the name through; for a policy of the
+owner's in Unbound DNS: Blocklists, only that it holds the name, and its description - none of its
+networks, lists or allowlist, which whoever may see Block Lists need not be allowed to see. The file may hold millions of names; it is searched where it lies
 (mmap), never loaded whole. pf's tables hold addresses: a name is not resolved, and not looked up there.
 
 Read only: nothing is changed, written or fetched. The argument is checked before anything is run - a
@@ -133,8 +134,8 @@ def web_categories(name):
 
 def unbound(name, path=None):
     """Unbound's blocklist entries for the name, and for each parent with a wildcard entry, as its module
-    matches them: {'read', 'held': [{entry, wildcard, policy, mine, description, bl, source_nets,
-    passes}]}. dnsbl.json is OPNsense's {"data": {name: [items]}, "config": {policy: {...}}}; it is
+    matches them: {'read', 'held': [...]} - for this plugin's policy {mine: True, entry, wildcard,
+    description, bl, passes}, for each of the owner's that holds it {mine: False, description}. dnsbl.json is OPNsense's {"data": {name: [items]}, "config": {policy: {...}}}; it is
     searched in place, and only the entries asked for and the policies are parsed."""
     path = path or DNSBL
     out = {'read': False, 'held': [], 'errors': []}
@@ -172,6 +173,7 @@ def unbound(name, path=None):
         out['errors'].append('%s could not be read: %s' % (path, e))
         return out
     config = config if isinstance(config, dict) else {}
+    owners = set()
     for entry, items in sorted(found, key=lambda f: len(f[0]), reverse=True):
         for item in items:
             if not isinstance(item, dict):
@@ -181,18 +183,23 @@ def unbound(name, path=None):
                 continue        # a parent's entry counts only where it is a wildcard one
             idx = str(item.get('idx') or '')
             policy = config.get(idx) if isinstance(config.get(idx), dict) else {}
+            description = str(policy.get('description') or '')
+            if idx != categories.POLICY:
+                # A policy of the owner's in Unbound DNS: Blocklists: only that it holds the name, by its
+                # description, once - not its networks, lists, entries or allowlist. The tab is open to
+                # whoever may see Block Lists, who need not be allowed to see Unbound's settings.
+                if idx not in owners:
+                    owners.add(idx)
+                    out['held'].append({'mine': False, 'description': description})
+                continue
             passes = False
             if isinstance(policy.get('passlist'), str) and policy['passlist']:
                 try:
                     passes = re.compile(policy['passlist'], re.IGNORECASE).match(name) is not None
                 except re.error:
                     passes = False
-            nets = policy.get('source_nets') if isinstance(policy.get('source_nets'), list) else []
-            out['held'].append({
-                'entry': entry, 'wildcard': wildcard, 'policy': idx, 'mine': idx == categories.POLICY,
-                'description': str(policy.get('description') or ''), 'bl': str(item.get('bl') or ''),
-                'source_nets': [str(n) for n in nets], 'passes': passes,
-            })
+            out['held'].append({'mine': True, 'entry': entry, 'wildcard': wildcard, 'description': description,
+                                'bl': str(item.get('bl') or ''), 'passes': passes})
     return out
 
 
