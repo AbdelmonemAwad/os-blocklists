@@ -53,6 +53,27 @@ done
 # PHP keeps them in its own temporary directory on 26.7 (/var/lib/php/tmp); /tmp is where they were
 rm -f /var/lib/php/tmp/opnsense_menu_cache.xml /var/lib/php/tmp/opnsense_acl_cache.json \
     /tmp/opnsense_menu_cache.xml /tmp/opnsense_acl_cache.json
+# The IPS drops' alias (ff-10, 2026-11-19), blocklists_ids: addresses held for a while, nothing of the
+# owner's - taken out of config.xml with the plugin, where nothing else names it (switched off where
+# something does), so the filter reload declares no table of it and the tables' loop below empties it.
+# Through OPNsense's own alias model: the plugin's files are gone, OPNsense's are not.
+/usr/local/bin/php -r '
+require_once("script/load_phalcon.php");
+$model = new \OPNsense\Firewall\Alias();
+foreach (iterator_to_array($model->aliases->alias->iterateItems()) as $uuid => $alias) {
+    if ((string)$alias->name !== "blocklists_ids") {
+        continue;
+    }
+    $text = (string)@file_get_contents("/conf/config.xml");
+    if (preg_match_all("/\\bblocklists_ids\\b/", $text) > 1 || substr_count($text, (string)$uuid) > 1) {
+        $alias->enabled = "0";
+    } else {
+        $model->aliases->alias->del($uuid);
+    }
+    $model->serializeToConfig();
+    \OPNsense\Core\Config::getInstance()->save();
+}
+' > /dev/null 2>&1 || true
 configctl filter reload > /dev/null 2>&1 || true
 # The pf tables of the plugin's aliases that are gone - an Apply with Block Lists off removes them -
 # emptied, when no rule uses them: a table outlives its alias and its rules, and went on holding the
