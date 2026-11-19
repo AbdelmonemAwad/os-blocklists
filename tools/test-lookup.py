@@ -80,7 +80,7 @@ def dnsbl(pretty=False):
     for i in range(20000):
         data['filler%05d.example' % i] = [{'bl': 'custom1', 'wildcard': True, 'idx': OWNER}]
     config = {'general': {'has_wildcards': True},
-              OWNER: {'source_nets': ['192.168.1.0/24'], 'address': '0.0.0.0', 'rcode': 'NOERROR',
+              OWNER: {'source_nets': ['198.51.100.0/24'], 'address': '0.0.0.0', 'rcode': 'NOERROR',
                       'description': 'Office', 'id': OWNER, 'passlist': '.*localhost$', 'prio': 256, 'hidx': 0,
                       # a key in the policies shaped like an entry: not one, being after "config"
                       'decoy.example': [{'bl': 'x', 'wildcard': True, 'idx': OWNER}]},
@@ -149,7 +149,7 @@ def main():
               'an exception lets every name under it through')
         ads = lookup.lookup('ads.example')
         check([(u['entry'], u['mine'], u['description'], u['source_nets']) for u in ads['unbound']['held']]
-              == [('ads.example', False, 'Office', ['192.168.1.0/24'])],
+              == [('ads.example', False, 'Office', ['198.51.100.0/24'])],
               'an exact entry of the owner\'s: his policy, its description and network: %r' % (ads['unbound'],))
         check(lookup.lookup('x.ads.example')['unbound']['held'] == [], 'a name under an exact entry: not held (only wildcards count)')
         both = lookup.lookup('a.tracker.example')
