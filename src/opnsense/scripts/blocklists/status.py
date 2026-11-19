@@ -7,7 +7,8 @@
 What the page shows, as one JSON object: each list this plugin owns with its entries and what its
 rules blocked, the countries, the DNS block lists OPNsense's Unbound has, the cutting of open
 connections and of JA4 fingerprints, ThreatFox's fetch and whether an abuse.ch Auth-Key is saved (never
-the key), and what os-xgs-npu does beside it where it is installed.
+the key), UT1's web categories - every one offered, what is chosen and applied, and why one is not
+(categories.page()) - and what os-xgs-npu does beside it where it is installed.
 
     status.py
 
@@ -22,6 +23,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import categories                                                        # noqa: E402
 import cut                                                               # noqa: E402
 import ja4_cut                                                           # noqa: E402
 
@@ -146,6 +148,12 @@ def main():
         'message': str(fetched.get('message') or '') if isinstance(fetched, dict) else '',
     }
 
+    # UT1's web categories (2026-11-19): the Web categories tab's rows and line
+    try:
+        web = categories.page(categories.settings(CONFIG))
+    except Exception as e:      # the rest of the page is read all the same
+        web = {'error': 'the web categories could not be read: %s' % e, 'rows': []}
+
     listed, problem, bad, _ = ja4_cut.settings()
     project_ja4 = [f for f in re.split(r'[\s,]+', root.findtext('OPNsense/XGS/general/cut_ja4') or '') if f]
     project_lists = [u for u in (root.findtext('OPNsense/XGS/general/cut_lists') or '').split(',') if u.strip()]
@@ -162,6 +170,7 @@ def main():
                 'last': load(CUT_STATUS, {})},
         'ja4': {'listed': listed, 'not_read': bad, 'problem': problem, 'last': load(JA4_STATUS, {})},
         'threatfox': threatfox,
+        'categories': web,
         'project': {'installed': os.path.exists(PROJECT_CUT) or os.path.exists(PROJECT_JA4),
                     'lists_watched': len(project_lists), 'ja4_listed': len(project_ja4)},
     }))
