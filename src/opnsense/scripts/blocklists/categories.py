@@ -20,10 +20,20 @@ config.xml or a catalogue says, and so is any archive with more than MAX_NAMES n
 
 HOW IT REACHES UNBOUND: not through the owner's Unbound settings, which are left as they are. OPNsense's
 blocklists.py (configctl unbound dnsbl) runs every handler in /usr/local/opnsense/scripts/unbound/blocklists/;
-this plugin's, blocklists_ut1.py, reads ACTIVE - the categories applied, the file each reads and the
-exceptions - and the files beside it, and gives Unbound one policy of its own for every client. Unbound reads
-the new dnsbl.json within 60 seconds, without a restart. This script writes ACTIVE and the files, and runs
-configctl unbound dnsbl once a run, only when something the handler reads changed.
+this plugin's, blocklists_ut1.py, reads ACTIVE - the categories applied, the file each reads (and its
+SHA-256) and the exceptions - and the files beside it, and gives Unbound one policy of its own for every
+client. Unbound reads the new dnsbl.json within 60 seconds, without a restart. This script writes ACTIVE
+and the files, and runs configctl unbound dnsbl once a run, only when ACTIVE changed, or a rebuild is still
+owed (pending, or MARKER after an install).
+
+A REBUILD IS DONE WHEN DNSBL.JSON SAYS SO, not when configctl answers: configctl gives up on its socket
+after 120 s and answers 0 while blocklists.py goes on, and blocklists.py leaves at once, with nothing
+written, when another runs (its lock, CORE_LOCK); the configd action ends in || true either way. So the
+handler stamps its policy with the SHA-256 of its own source and of the ACTIVE it read (OPNsense copies a
+policy into dnsbl.json whole), and this waits - RELOAD_TIMEOUT at the most - while CORE_LOCK is held, then
+reads the policy's stamp there: the rebuild is done when it is the stamp of this ACTIVE and this handler
+(or, with nothing applied, when the policy is gone), and owed - tried at the next run - while it is not.
+A rebuild that began before ACTIVE was written and ends after it is so told from one that read it.
 
 FETCHING: https://dsi.ut-capitole.fr/blacklists/download/<archive>.tar.gz over HTTPS with the server's
 certificate checked, with If-Modified-Since and If-None-Match where a copy is kept: UT1 answers 304 when
@@ -52,6 +62,7 @@ import hashlib
 import http.client
 import ipaddress
 import json
+import mmap
 import os
 import re
 import subprocess
@@ -72,9 +83,13 @@ STATUS = os.path.join(STATE_DIR, 'status.json')
 ACTIVE = os.path.join(STATE_DIR, 'unbound.json')        # what blocklists_ut1.py reads
 CATALOGUE = os.path.join(STATE_DIR, 'catalogue.json')   # UT1's global_usage, as read here
 LOCK = os.path.join(STATE_DIR, 'lock')
+MARKER = os.path.join(STATE_DIR, 'rebuild')             # a rebuild owed by an install that found a run going
+EMPTY = {'categories': {}, 'exceptions': [], 'files': {}}   # ACTIVE with nothing applied, or none at all
 HANDLER = '/usr/local/opnsense/scripts/unbound/blocklists/blocklists_ut1.py'
 POLICY = 'f188da6c-137b-41dd-b504-fe5d96a73483'         # the handler's policy id, as it writes it
 DNSBL = '/var/unbound/data/dnsbl.json'                  # what OPNsense's blocklists.py writes
+CORE_LOCK = '/tmp/unbound-download_blocklists.tmp'      # blocklists.py's lock, held while it runs
+TAIL = 4 << 20                  # bytes of dnsbl.json's end read first: its "config", the policies, is last
 CONFIGCTL = '/usr/local/sbin/configctl'
 DOWNLOAD = 'https://dsi.ut-capitole.fr/blacklists/download/'
 CATALOGUE_URL = DOWNLOAD + 'global_usage'
@@ -537,28 +552,130 @@ def fetch_catalogue(st, now):
             st.pop(key, None)
 
 
-def mtime(path):
-    try:
-        return os.stat(path).st_mtime_ns
-    except OSError:
+def expected():
+    """The stamp the handler gives its policy for what is applied now - SHA-256 of its source, a newline
+    and ACTIVE's bytes, as it computes it - or None where nothing is applied (it then gives no policy)."""
+    active = load(ACTIVE, EMPTY)
+    if not isinstance(active, dict) or not active.get('categories'):
         return None
-
-
-def reload_unbound():
-    """configctl unbound dnsbl: OPNsense's blocklists.py runs every handler, this plugin's too, and
-    writes dnsbl.json, which Unbound reads within 60 seconds. (done, error): not done where dnsbl.json
-    was not written - blocklists.py runs one at a time and leaves when another runs - so the next run
-    tries again."""
-    before = mtime(DNSBL)
     try:
-        r = subprocess.run([CONFIGCTL, 'unbound', 'dnsbl'], capture_output=True, text=True, timeout=RELOAD_TIMEOUT)
+        with open(HANDLER, 'rb') as handle:
+            source = handle.read()
+        with open(ACTIVE, 'rb') as handle:
+            return hashlib.sha256(source + b'\n' + handle.read()).hexdigest()
+    except OSError:
+        return ''
+
+
+def dnsbl_config(path=None):
+    """The "config" of dnsbl.json - the policies, {id: policy} - read from its end, where OPNsense's
+    blocklists.py writes it; {} where there is no file or an empty one (no policy holds a name), None
+    where it cannot be read. dnsbl.json may hold millions of names: only its end is read, and the whole
+    file searched in place only where the end does not hold it."""
+    path = path or DNSBL
+    try:
+        size = os.path.getsize(path)
+        if size == 0:
+            return {}
+        with open(path, 'rb') as handle:
+            handle.seek(max(0, size - TAIL))
+            tail = handle.read()
+            found = None
+            for found in re.finditer(rb'"config"\s*:\s*\{', tail):
+                pass
+            if found is None and size > TAIL:
+                with mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as whole:
+                    for found in re.finditer(rb'"config"\s*:\s*\{', whole):
+                        pass
+                    tail = whole[found.start():] if found is not None else b''
+                    found = re.match(rb'"config"\s*:\s*\{', tail)
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError):
+        return None
+    if found is None:
+        return None
+    try:
+        config, _ = json.JSONDecoder().raw_decode(tail[found.end() - 1:].decode('utf-8', 'replace'))
+    except ValueError:
+        return None
+    return config if isinstance(config, dict) else None
+
+
+def written(stamp_now, since=None):
+    """Whether Unbound's data holds what is applied now: this plugin's policy with that stamp - or, with
+    nothing applied (None), no policy of its own. An empty dnsbl.json (no policy of anyone's holds a name)
+    counts only where it was written since the rebuild was asked for."""
+    config = dnsbl_config()
+    if config is None:
+        return False
+    if not config:
+        try:
+            fresh = since is not None and os.stat(DNSBL).st_mtime >= since
+        except OSError:
+            fresh = False
+        return stamp_now is None or fresh
+    policy = config.get(POLICY)
+    if stamp_now is None:
+        return policy is None
+    return isinstance(policy, dict) and policy.get('stamp') == stamp_now
+
+
+def core_busy():
+    """Whether OPNsense's blocklists.py runs now: its lock held. Probed and let go at once; the lock file
+    is opened for reading only - never made, emptied or removed here."""
+    try:
+        fd = os.open(CORE_LOCK, os.O_RDONLY)
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return True
+    else:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    finally:
+        os.close(fd)
+
+
+def pause(seconds):
+    time.sleep(seconds)
+
+
+def wait_core(until):
+    """While blocklists.py runs, wait for it to end - until `until` (time.monotonic()) at the most."""
+    while core_busy() and time.monotonic() < until:
+        pause(1)
+
+
+def configctl(*args):
+    return subprocess.run([CONFIGCTL] + list(args), capture_output=True, text=True, timeout=RELOAD_TIMEOUT)
+
+
+def reload_unbound(stamp_now):
+    """Unbound's blocklist made to hold what is applied now (stamp_now, expected()): a rebuild of
+    blocklists.py's already running waited for, as it may have read an older ACTIVE; nothing more where
+    dnsbl.json then holds it; else configctl unbound dnsbl, and blocklists.py waited for again, for
+    RELOAD_TIMEOUT in all. (done, error T()) - not done, the next run looks again."""
+    until = time.monotonic() + RELOAD_TIMEOUT
+    wait_core(until)
+    if written(stamp_now):
+        return True, None
+    asked = time.time() - 1
+    try:
+        r = configctl('unbound', 'dnsbl')
     except (OSError, subprocess.SubprocessError) as e:
         return False, T('configctl could not be run: %s', str(e))
     if r.returncode != 0:
         return False, T('configctl unbound dnsbl failed: %s', (r.stderr or r.stdout or '').strip()[:200])
-    if mtime(DNSBL) == before:
-        return False, T('the Unbound blocklist was not written: tried again at the next run')
-    return True, None
+    wait_core(until)
+    if written(stamp_now, asked):
+        return True, None
+    if core_busy():
+        return False, T('the Unbound blocklist is still being rebuilt after %s s: looked at again at the next run',
+                        RELOAD_TIMEOUT)
+    return False, T('the Unbound blocklist does not hold what is applied yet: rebuilt again at the next run')
 
 
 def describe(archive, st):
@@ -642,20 +759,30 @@ def run(now=None, apply=False):
             pass
 
     applied = {cid: archive for archive, cids in wanted.items() if os.path.isfile(data_path(archive)) for cid in cids}
-    active = {'categories': dict(sorted(applied.items())), 'exceptions': conf['exceptions'] if applied else []}
+    # each file's SHA-256 in ACTIVE too: a changed copy changes ACTIVE, and so the stamp of the rebuild
+    active = {'categories': dict(sorted(applied.items())), 'exceptions': conf['exceptions'] if applied else [],
+              'files': {a: str(status['archives'].get(a, {}).get('sha256') or '') for a in sorted(set(applied.values()))}}
     # no ACTIVE is none applied: a firewall where nothing was ever chosen gets no file and no rebuild
-    need = load(ACTIVE, {'categories': {}, 'exceptions': []}) != active
+    need = load(ACTIVE, EMPTY) != active
     if need:
         save(ACTIVE, active)
-    need = need or any(outcomes.get(a) == 'changed' for a in set(applied.values())) or status['reload'].get('pending')
+    owed = os.path.exists(MARKER)
+    need = need or owed or status['reload'].get('pending')
+    if need and applied and not os.path.isfile(HANDLER):
+        need = False        # nothing to rebuild with: the line says the handler is missing
     if need:
-        done, error = reload_unbound()
+        done, error = reload_unbound(expected())
         status['reload'] = {'at': now, 'pending': not done}
         if error:
             status['reload']['error'] = error
             say(english(error))
         else:
             say('Unbound\'s blocklist rebuilt: %d categories applied' % len(applied))
+            if owed:
+                try:
+                    os.unlink(MARKER)
+                except OSError:
+                    pass
 
     for archive, st in status['archives'].items():
         st['message'] = describe(archive, st)
@@ -686,15 +813,27 @@ def run(now=None, apply=False):
             'reloaded': bool(need) and not status['reload'].get('pending'), 'message': english(status['message'])}
 
 
+def owe():
+    """A rebuild owed to the next run (MARKER): the handler just installed is to be the one read."""
+    try:
+        with open(MARKER, 'a'):
+            pass
+    except OSError:
+        pass
+
+
 def installed():
     """After an install or an update: Unbound's blocklist rebuilt where categories are applied, so the
-    handler just put in place is the one Unbound's data comes from; nothing else."""
+    handler just put in place is the one Unbound's data comes from - its stamp holds its source; nothing
+    else. Where it cannot be done now, it is owed to the next run (MARKER)."""
     active = load(ACTIVE, {})
     if not isinstance(active, dict) or not active.get('categories'):
         return {'message': "no category applied: Unbound's blocklist left as it is"}
-    done, error = reload_unbound()
-    return {'message': "Unbound's blocklist rebuilt with %d categories" % len(active['categories']) if done
-            else english(error)}
+    done, error = reload_unbound(expected())
+    if not done:
+        owe()
+        return {'message': english(error) + ' (owed to the next run)'}
+    return {'message': "Unbound's blocklist holds the %d categories applied" % len(active['categories'])}
 
 
 def busy():
@@ -769,6 +908,12 @@ def main(argv):
         os.makedirs(STATE_DIR, mode=0o750, exist_ok=True)
         with open(LOCK, 'w') as lock:
             if not take(lock, WAIT[mode]):
+                if mode == 'installed':
+                    # a run is fetching: it, or the next, rebuilds Unbound's blocklist with the new handler
+                    owe()
+                    print("Block Lists: web categories: a run is going on; Unbound's blocklist is rebuilt by "
+                          'the next run, within five minutes')
+                    return 0
                 last = load(STATUS, {})
                 print(json.dumps({'message': english(last.get('message') or 'another run is fetching'), 'busy': True}))
                 return 0

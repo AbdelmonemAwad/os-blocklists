@@ -16,11 +16,16 @@ the $ and the escape keep example.com from passing example.com.evil.net; and a n
 is not given at all, so this policy holds no entry of its own for it. They apply to this policy only, as
 OPNsense's own allowlists do.
 
+Its policy carries a stamp: the SHA-256 of this handler's own source and of the ACTIVE it read. OPNsense
+copies a policy into dnsbl.json whole, so categories.py reads there which handler wrote Unbound's data
+from which ACTIVE, and knows a rebuild done - or not yet - whatever configctl's answer said.
+
 Every name given is checked as OPNsense's own handler checks one (domain_pattern), and a bare IPv4
 address is never given as a name. Never stops the update: a file that is missing, a link, too large or
 unreadable is left out, the others given; what cannot be read is said in Unbound's log; and adult is
 refused whatever ACTIVE says (decision d2).
 """
+import hashlib
 import ipaddress
 import json
 import os
@@ -50,6 +55,21 @@ DOMAIN = re.compile(
 )
 
 
+def own_source():
+    """This handler's source as read now: a part of its stamp, so a new one is told from an old one."""
+    try:
+        with open(__file__, 'rb') as handle:
+            return handle.read()
+    except OSError:
+        return b''
+
+
+def stamp(active):
+    """The stamp of a rebuild: SHA-256 of this handler's source, a newline, and ACTIVE's bytes - as
+    categories.py computes it from the same files."""
+    return hashlib.sha256(own_source() + b'\n' + active).hexdigest()
+
+
 def log(priority, message):
     try:
         syslog.syslog(priority, 'blocklist: os-blocklists categories: %s' % message)
@@ -58,20 +78,21 @@ def log(priority, message):
 
 
 def read_active(path):
-    """({category: archive}, [exception]) from ACTIVE, each checked; nothing where it is missing,
+    """({category: archive}, [exception], stamp) from ACTIVE, each checked; nothing where it is missing,
     a link or not what categories.py writes."""
     try:
         if os.path.islink(path):
             raise ValueError('a link, not a file')
-        with open(path, encoding='utf-8') as handle:
-            data = json.load(handle)
+        with open(path, 'rb') as handle:
+            raw = handle.read()
+        data = json.loads(raw.decode('utf-8'))
     except FileNotFoundError:
-        return {}, []
+        return {}, [], ''
     except (OSError, ValueError) as e:
         log(syslog.LOG_ERR, '%s not read: %s' % (path, e))
-        return {}, []
+        return {}, [], ''
     if not isinstance(data, dict):
-        return {}, []
+        return {}, [], ''
     categories = {}
     given = data.get('categories')
     for cid, archive in (given.items() if isinstance(given, dict) else []):
@@ -88,7 +109,7 @@ def read_active(path):
         name = name.strip().lower().rstrip('.') if isinstance(name, str) else ''
         if EXCEPTION.match(name) and name not in exceptions:
             exceptions.append(name)
-    return categories, exceptions
+    return categories, exceptions, stamp(raw)
 
 
 def passlist(exceptions):
@@ -120,21 +141,21 @@ def covered(name, exceptions):
 
 class UT1BlocklistHandler(BaseBlocklistHandler):
     def __init__(self):
-        self.categories, self.exceptions = {}, []
+        self.categories, self.exceptions, self.stamp = {}, [], ''
         try:
             super().__init__(ACTIVE)
         except Exception as e:      # an interface of OPNsense's that changed: this handler gives nothing
             log(syslog.LOG_ERR, 'not started: %s' % e)
-            self.categories, self.exceptions = {}, []
+            self.categories, self.exceptions, self.stamp = {}, [], ''
         self.priority = PRIORITY
 
     def _load_config(self):
         """ACTIVE, a JSON file of the plugin's, read instead of the INI file the base class reads."""
         try:
-            self.categories, self.exceptions = read_active(self.config)
+            self.categories, self.exceptions, self.stamp = read_active(self.config)
         except Exception as e:
             log(syslog.LOG_ERR, '%s not read: %s' % (self.config, e))
-            self.categories, self.exceptions = {}, []
+            self.categories, self.exceptions, self.stamp = {}, [], ''
 
     def get_policies(self):
         if not self.categories:
@@ -147,6 +168,8 @@ class UT1BlocklistHandler(BaseBlocklistHandler):
                 'rcode': RCODE,
                 'description': DESCRIPTION,
                 'passlist': passlist(self.exceptions),
+                # which handler wrote it from which ACTIVE: categories.py reads it in dnsbl.json
+                'stamp': self.stamp,
             }]
         except Exception as e:
             log(syslog.LOG_ERR, 'no policy: %s' % e)

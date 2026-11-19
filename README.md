@@ -206,7 +206,13 @@ Block lists in one place: addresses, DNS names, UT1's web categories, countries 
     archive says; its names are written, lowercased and each once, into
     `/var/db/os-blocklists/categories/<archive>.domains`, and its bare IPv4 lines left out, as DNS
     cannot use them - and Unbound's blocklist is rebuilt once a run, only when something the handler
-    reads changed. The page's Apply runs it at once, in the background. A download that fails keeps the
+    reads changed. A rebuild counts as done when `dnsbl.json` says so, not when configctl answers
+    (configctl gives up on its socket after 120 s and answers 0 while OPNsense's `blocklists.py` goes
+    on, and `blocklists.py` leaves at once, writing nothing, while another update runs): the handler
+    stamps its policy with the SHA-256 of its own source and of what it read, OPNsense copies the
+    policy into `dnsbl.json` whole, and the script waits - 15 minutes at the most - while `blocklists.py`
+    holds its lock, then reads that stamp; a rebuild not done, or done from an older state, is done
+    again at the next run. The page's Apply runs it at once, in the background. A download that fails keeps the
     last good copy, and the tab says so; a category no longer chosen, or Block Lists turned off, is taken
     out at the next run. With none chosen the script contacts no one and writes nothing.
   - *Exceptions.* Names let through, each with every name under it: written into the policy's passlist
@@ -490,8 +496,10 @@ holding the addresses (all of this since 2026-10-29). Since 2026-11-19 it also r
 categories' handler from OPNsense's folder of Unbound blocklist handlers - by its own name, never the
 folder - with what Python compiled of it there, deletes the categories fetched, and rebuilds Unbound's
 blocklist (`configctl unbound dnsbl`) while it still holds the plugin's policy, so nothing of the
-plugin's stays in Unbound. An install or an update rebuilds it only where categories are applied, so
-the handler just installed is the one read.
+plugin's stays in Unbound. An install or an update rebuilds it only where categories are applied and
+`dnsbl.json` was not written by the handler just installed (its stamp holds the handler's source); where
+a run of the script is going on, or the rebuild is not done, it is owed to the next run, within five
+minutes.
 
 **From a release's package.** A release carries `os-blocklists-<version>.pkg` and `SHA256SUMS`,
 built by `tools/make-package.sh` in the release workflow; ~~installing it has not been tested yet~~

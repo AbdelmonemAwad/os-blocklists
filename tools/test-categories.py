@@ -31,6 +31,8 @@ import shutil
 import sys
 import tarfile
 import tempfile
+import threading
+import time
 import types
 import urllib.error
 import xml.etree.ElementTree as ET
@@ -462,24 +464,71 @@ def run_tests(tmp):
     categories.ACTIVE = os.path.join(state, 'unbound.json')
     categories.CATALOGUE = os.path.join(state, 'catalogue.json')
     categories.LOCK = os.path.join(state, 'lock')
-    categories.HANDLER = HANDLER
+    categories.MARKER = os.path.join(state, 'rebuild')
     categories.CONFIG = os.path.join(tmp, 'config.xml')
+    categories.DNSBL = os.path.join(tmp, 'dnsbl.json')
+    categories.CORE_LOCK = os.path.join(tmp, 'unbound-download_blocklists.tmp')
     server = Server()
     categories.URLOPEN = server
     reloads, said = [], []
     result = {'done': True}
-
-    def reload_unbound():
-        reloads.append(json.load(open(categories.ACTIVE)))
-        return (True, None) if result['done'] else (False, 'Unbound\'s blocklist was not written (another update running?)')
-    categories.reload_unbound = reload_unbound
     categories.say = said.append
+    # OPNsense's blocklists.py stood in for, behind configctl: the handler itself, imported beside the
+    # stand-in base class, run and merged as blocklists.py does, its dnsbl.json written as it writes it
+    # (empty where no policy holds a name). Modes: 'sync' - rebuilt before configctl answers; 'skip' -
+    # nothing written (blocklists.py left: another update held its lock); 'stale' - written from an older
+    # ACTIVE (a rebuild that began before it was written); 'async' - configctl answers at once and
+    # blocklists.py goes on, holding its lock, for `delay` seconds.
+    handler = load_handler(os.path.join(tmp, 'core'))
+    handler.ACTIVE, handler.DATA = categories.ACTIVE, state
+    categories.HANDLER = handler.__file__       # the installed handler: the stamp reads its source
+    core = {'mode': 'sync', 'busy': False, 'old': None, 'delay': 0.3, 'threads': []}
+
+    def rebuild(active_path=None):
+        handler.ACTIVE = active_path or categories.ACTIVE
+        try:
+            merged = merge([handler.UT1BlocklistHandler()])
+        finally:
+            handler.ACTIVE = categories.ACTIVE
+        with open(categories.DNSBL, 'w') as fh:
+            if merged['data']:
+                json.dump(merged, fh, separators=(',', ':'))
+
+    def configctl(*args):
+        assert args == ('unbound', 'dnsbl'), args
+        reloads.append(json.load(open(categories.ACTIVE)))
+        if core['mode'] == 'sync' and result['done']:
+            rebuild()
+        elif core['mode'] == 'stale':
+            rebuild(core['old'])
+        elif core['mode'] == 'async':
+            core['busy'] = True
+
+            def later():
+                time.sleep(core['delay'])
+                rebuild()
+                core['busy'] = False
+            thread = threading.Thread(target=later)
+            core['threads'].append(thread)
+            thread.start()
+        return types.SimpleNamespace(returncode=0, stdout='OK\n', stderr='')
+    real_core_busy = categories.core_busy
+    categories.configctl = configctl
+    categories.core_busy = lambda: core['busy']
+    categories.pause = lambda seconds: time.sleep(0.02)
 
     def config(cats, enabled='1', exceptions='Example.com,www.example.org,bad name'):
         write(categories.CONFIG, CONFIG.format(enabled=enabled, categories=cats, exceptions=exceptions))
 
     def active():
         return json.load(open(categories.ACTIVE))
+
+    def core_of(given):
+        return {k: v for k, v in given.items() if k != 'files'}
+
+    def policy():
+        """this plugin's policy in dnsbl.json, or None"""
+        return (categories.dnsbl_config() or {}).get(categories.POLICY)
 
     # nothing chosen: no one contacted
     config('')
@@ -502,10 +551,13 @@ def run_tests(tmp):
     check(all(r[2] == 'os-blocklists' for r in server.requests), 'run: a User-Agent of os-blocklists')
     check(set(out['refused']) == {'adult', 'nosuch', '../x'} and 'cannot be chosen' in out['refused']['adult'],
           'run: adult refused with its reason, the others too: %r' % (out['refused'],))
-    check(active() == {'categories': {'gambling': 'gambling', 'malware': 'phishing', 'phishing': 'phishing'},
-                       'exceptions': ['example.com', 'www.example.org']},
+    check(core_of(active()) == {'categories': {'gambling': 'gambling', 'malware': 'phishing', 'phishing': 'phishing'},
+                                'exceptions': ['example.com', 'www.example.org']}
+          and set(active()['files']) == {'gambling', 'phishing'} and all(len(v) == 64 for v in active()['files'].values()),
           'run: ACTIVE - the categories applied and their archive, the exceptions checked: %r' % (active(),))
     check(len(reloads) == 1, 'run: Unbound\'s blocklist rebuilt once for the run: %d' % len(reloads))
+    check(policy() and policy()['stamp'] == categories.expected() and json.load(open(categories.STATUS))['reload']['pending'] is False,
+          'run: dnsbl.json holds the policy with the stamp of this handler and this ACTIVE - the rebuild done')
     check(sorted(os.listdir(state)) == sorted(['catalogue.json', 'gambling.domains', 'phishing.domains', 'status.json',
                                                'unbound.json']),
           'run: the files kept - one domains file each archive, nothing by an archive\'s own path: %r' % (sorted(os.listdir(state)),))
@@ -541,7 +593,7 @@ def run_tests(tmp):
           'run: a new copy with the same names - unchanged, not rebuilt: %r' % (out['fetched'],))
     server.put('gambling.tar.gz', tar([('gambling/domains', b'casino.example\nnew.example\n')]), 'Thu, 19 Nov 2026 09:00:00 GMT')
     out = categories.run(now=t0 + 6 * 3600 + 3)
-    check(out['fetched'].get('gambling') == 'changed' and len(reloads) == 2
+    check(out['fetched'].get('gambling') == 'changed' and len(reloads) == 2 and policy()['stamp'] == categories.expected()
           and open(os.path.join(state, 'gambling.domains')).read() == 'casino.example\nnew.example\n',
           'run: a changed copy - kept, and Unbound rebuilt once')
 
@@ -584,7 +636,7 @@ def run_tests(tmp):
     before = len(reloads)
     out = categories.run(now=t0 + 10 * 3600, apply=True)
     check(not os.path.exists(os.path.join(state, 'gambling.domains')) and 'gambling' in out['removed']
-          and active() == {'categories': {'malware': 'phishing'}, 'exceptions': ['example.com', 'www.example.org']}
+          and core_of(active()) == {'categories': {'malware': 'phishing'}, 'exceptions': ['example.com', 'www.example.org']}
           and len(reloads) == before + 1,
           'run: gambling unchosen - its file deleted, ACTIVE without it, Unbound rebuilt: %r' % (active(),))
     check(os.path.exists(os.path.join(state, 'phishing.domains')), 'run: malware alone keeps phishing\'s one file')
@@ -594,7 +646,7 @@ def run_tests(tmp):
     config('malware', enabled='0')
     server.requests.clear()
     out = categories.run(now=t0 + 11 * 3600, apply=True)
-    check(active() == {'categories': {}, 'exceptions': []} and not os.path.exists(os.path.join(state, 'phishing.domains'))
+    check(active() == categories.EMPTY and not os.path.exists(os.path.join(state, 'phishing.domains'))
           and server.requests == [] and len(reloads) == before + 3 and 'Block Lists is off' in out['message'],
           'run: Block Lists off - every category taken out, nothing fetched, Unbound rebuilt once: %r' % (out['message'],))
     before = len(reloads)
@@ -620,13 +672,21 @@ def run_tests(tmp):
     check('not the catalogue of UT1' in categories.english(status['catalogue'].get('error', '')) and 'cat03' in categories.catalogue(),
           'run: global_usage answered with a maintenance page - refused, the catalogue kept: %r' % (status['catalogue'],))
 
-    # --installed: a rebuild only where categories are applied
+    # --installed: a rebuild only where categories are applied and the handler is not the one that wrote
     before = len(reloads)
-    check('rebuilt with 1 categories' in categories.installed()['message'] and len(reloads) == before + 1,
-          'installed: categories applied - Unbound\'s blocklist rebuilt')
-    write(categories.ACTIVE, json.dumps({'categories': {}, 'exceptions': []}))
-    check('left as it is' in categories.installed()['message'] and len(reloads) == before + 1,
-          'installed: none applied - nothing run')
+    check('holds the 1 categories' in categories.installed()['message'] and len(reloads) == before,
+          'installed: the same handler already wrote this ACTIVE - nothing run')
+    old = categories.expected()
+    with open(categories.HANDLER, 'a') as fh:
+        fh.write('# a new release of the handler\n')
+    check(categories.expected() != old and policy()['stamp'] == old,
+          'installed: a new handler - a new stamp, and dnsbl.json still the old one\'s')
+    check('holds the 1 categories' in categories.installed()['message'] and len(reloads) == before + 1
+          and policy()['stamp'] == categories.expected(),
+          'installed: a new handler - Unbound\'s blocklist rebuilt with it')
+    reload_tests(categories, core, reloads, result, policy, config, state, real_core_busy)
+    write(categories.ACTIVE, json.dumps(categories.EMPTY))
+    check('left as it is' in categories.installed()['message'], 'installed: none applied - nothing run')
 
     # the page's rows
     config('gambling,adult', exceptions='example.com')
@@ -649,6 +709,110 @@ def run_tests(tmp):
 
 
 SOURCE = os.path.join(SCRIPTS, 'i18n', 'ui', 'source.json')
+
+
+def reload_tests(categories, core, reloads, result, policy, config, state, real_core_busy):
+    """A rebuild taken as done only when dnsbl.json says so (2026-11-19 review): configctl answering while
+    blocklists.py goes on, past RELOAD_TIMEOUT too; a rebuild of an older ACTIVE; one that wrote nothing;
+    nothing applied but the policy still there; an install that found a run going or a rebuild not done."""
+    t = 3000000
+    status = lambda: json.load(open(categories.STATUS))      # noqa: E731
+    # configctl answers at once (its socket's 120 s), blocklists.py goes on: waited for, then read
+    config('gambling', exceptions='')
+    core['mode'], core['delay'] = 'async', 0.3
+    started = time.monotonic()
+    categories.run(now=t, apply=True)
+    check(status()['reload']['pending'] is False and policy()['stamp'] == categories.expected()
+          and time.monotonic() - started >= 0.25,
+          'rebuild: configctl answered while blocklists.py went on - its end waited for, the stamp read: done')
+    # past RELOAD_TIMEOUT: owed, and the next run finds it done without asking again
+    saved, categories.RELOAD_TIMEOUT = categories.RELOAD_TIMEOUT, 0.2
+    core['delay'] = 0.8
+    config('gambling', exceptions='example.com')
+    categories.run(now=t + 300, apply=True)
+    check(status()['reload']['pending'] is True
+          and 'still being rebuilt' in categories.english(status()['reload']['error']),
+          'rebuild: longer than RELOAD_TIMEOUT - pending, not taken for done: %r' % (status()['reload'],))
+    for thread in core['threads']:
+        thread.join()
+    calls = len(reloads)
+    categories.run(now=t + 600)
+    check(status()['reload']['pending'] is False and len(reloads) == calls and policy()['stamp'] == categories.expected(),
+          'rebuild: the long one ended with this ACTIVE - the next run sees it done, and asks for no other')
+    categories.RELOAD_TIMEOUT = saved
+    # a rebuild that read the ACTIVE before this one: not taken for this one
+    old = os.path.join(state, 'unbound.json.old')
+    with open(categories.ACTIVE, 'rb') as src, open(old, 'wb') as dst:
+        dst.write(src.read())
+    core['mode'], core['old'] = 'stale', old
+    config('gambling', exceptions='')
+    categories.run(now=t + 900, apply=True)
+    check(status()['reload']['pending'] is True and policy() and policy()['stamp'] != categories.expected(),
+          'rebuild: dnsbl.json written from the older ACTIVE (a rebuild begun before it changed) - pending')
+    core['mode'] = 'sync'
+    categories.run(now=t + 1200)
+    check(status()['reload']['pending'] is False and policy()['stamp'] == categories.expected(),
+          'rebuild: rebuilt at the next run, with this ACTIVE')
+    # nothing applied, the policy still there: owed until it is gone
+    core['mode'] = 'skip'
+    config('gambling', enabled='0')
+    categories.run(now=t + 1500, apply=True)
+    check(status()['reload']['pending'] is True and policy() is not None,
+          'rebuild: nothing applied, blocklists.py wrote nothing - the policy still there, pending')
+    core['mode'] = 'sync'
+    categories.run(now=t + 1800)
+    check(status()['reload']['pending'] is False and policy() is None,
+          'rebuild: the policy gone from dnsbl.json - done')
+    # an install that finds a run going: the rebuild owed to the next run, which does it
+    config('gambling', exceptions='')
+    categories.run(now=t + 2100, apply=True)
+    with open(categories.HANDLER, 'a') as fh:
+        fh.write('# another release\n')
+    taken, categories.take = categories.take, lambda lock, wait: False
+    out = io.StringIO()
+    from contextlib import redirect_stdout
+    with redirect_stdout(out):
+        categories.main(['--installed'])
+    categories.take = taken
+    check(os.path.exists(categories.MARKER) and 'next run' in out.getvalue(),
+          'installed: a run going - the rebuild owed to the next run (MARKER): %r' % (out.getvalue(),))
+    calls = len(reloads)
+    categories.run(now=t + 2400)
+    check(len(reloads) == calls + 1 and not os.path.exists(categories.MARKER) and policy()['stamp'] == categories.expected(),
+          'run: the rebuild owed by the install done with the new handler, though nothing else changed')
+    # an install whose rebuild is not done: owed too
+    with open(categories.HANDLER, 'a') as fh:
+        fh.write('# a third release\n')
+    core['mode'] = 'skip'
+    message = categories.installed()['message']
+    check(os.path.exists(categories.MARKER) and 'owed to the next run' in message,
+          'installed: a rebuild not done - owed to the next run: %r' % (message,))
+    core['mode'] = 'sync'
+    categories.run(now=t + 2700)
+    check(not os.path.exists(categories.MARKER) and policy()['stamp'] == categories.expected(), 'run: and done')
+    # dnsbl.json's policies found at its end, or anywhere in it
+    saved, categories.TAIL = categories.TAIL, 64
+    check(categories.dnsbl_config().get(categories.POLICY, {}).get('stamp') == categories.expected(),
+          'dnsbl_config: the policies found past the end read first')
+    categories.TAIL = saved
+    with open(categories.DNSBL, 'w') as fh:
+        fh.write('{"data": {"a.example": [')
+    check(categories.dnsbl_config() is None and categories.written(categories.expected()) is False,
+          'dnsbl_config: a broken dnsbl.json - not read, not taken for done')
+    core['mode'] = 'sync'
+    categories.run(now=t + 3000, apply=True)
+    # blocklists.py's lock as it holds it: probed, let go, never made
+    lock = categories.CORE_LOCK
+    if os.path.exists(lock):
+        os.unlink(lock)
+    check(real_core_busy() is False and not os.path.exists(lock), 'core_busy: no lock file - not busy, and none made')
+    if os.name == 'posix':      # a real flock: not the stand-in Windows gets
+        import fcntl
+        with open(lock, 'w') as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            check(real_core_busy() is True, 'core_busy: blocklists.py holding its lock - busy')
+            fcntl.flock(held, fcntl.LOCK_UN)
+        check(real_core_busy() is False and os.path.exists(lock), 'core_busy: let go - not busy, the file left as it was')
 
 
 def texts(value, found):
