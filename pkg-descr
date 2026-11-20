@@ -10,6 +10,12 @@ address are cut, and on a Sophos XGS taken out of the coprocessor.
 Plugin Changelog
 ================
 
+1.0.4
+
+* Phase 2: web categories from UT1 through Unbound's own blocklist, and a
+  Lookup tab
+* Phase 3: what the IPS drops, blocked and cut for a while
+
 1.0.3
 
 * with Both ways, a device inside that tries to reach a
